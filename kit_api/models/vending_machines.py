@@ -21,7 +21,7 @@ class VendingMachinesCollection(BaseModel):
 
     def get_snack_machines(self) -> list[VendingMachineModel]:
         """Получить только снэк-автоматы (номера начинаются с 5)"""
-        return [item for item in self.items if str.startswith(str(item.number), "5")]
+        return [item for item in self.items if str(item.number).startswith("5")]
 
 
 class VendingMachineStateModel(BaseModel):

@@ -2,29 +2,10 @@
 Модели матриц товаров Kit API
 """
 
-from dataclasses import dataclass
 from typing import Literal, Union, Annotated
 from pydantic import BaseModel, Field, Tag, BeforeValidator
 
-
-class ProductModel(BaseModel):
-    """Модель товара в матрице"""
-    name: str
-    code: int | None
-
-    @classmethod
-    def create(cls, val: str):
-        if "|" in val:
-            code, name = val.split("|")
-            return cls(
-                name=name.strip(),
-                code=int(code.strip())
-            )
-
-        return cls(
-            name=val.strip(),
-            code=None
-        )
+from kit_api.models.common import ProductModel
 
 
 class GoodsMatrixCell(BaseModel):
@@ -52,6 +33,7 @@ class RecipeMatrixCell(BaseModel):
 class MatrixKitModel(BaseModel):
     id: Annotated[int, Field(validation_alias="MatrixId")]
     name: Annotated[str, Field(validation_alias="MatrixName")]
+    cells: Annotated[list[GoodsMatrixCell | RecipeMatrixCell], Field(validation_alias="Details")]
 
 
 class GoodsMatrixKitModel(MatrixKitModel):
@@ -85,3 +67,6 @@ class MatricesKitCollection(BaseModel):
         """Получить только матрицы товаров (тип 1)"""
         return [item for item in self.items if isinstance(item, GoodsMatrixKitModel)]
 
+    def get_recipes_matrices(self) -> list[RecipeMatrixKitModel]:
+        """Получить только матрицы товаров (тип 2)"""
+        return [item for item in self.items if isinstance(item, RecipeMatrixKitModel)]
