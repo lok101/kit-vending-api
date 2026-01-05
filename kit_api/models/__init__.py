@@ -2,6 +2,7 @@
 Модели данных для Kit API
 """
 
+from kit_api.models.common import ProductModel
 from kit_api.models.matrices import (
     MatricesKitCollection,
     GoodsMatrixKitModel,
@@ -15,12 +16,15 @@ from kit_api.models.products import (
     ProductsKitCollection,
     ProductKitModel,
 )
+from kit_api.models.recipes import (
+    RecipesKitCollection,
+    RecipeKitModel,
+)
 from kit_api.models.sales import (
     SalesKitCollection,
     SaleKitModel,
-    ProductModel as SalesProductModel,
 )
-from kit_api.models.vending_machine import (
+from kit_api.models.vending_machines import (
     VendingMachinesCollection,
     VendingMachineModel,
     VendingMachineStateModel,
@@ -28,6 +32,8 @@ from kit_api.models.vending_machine import (
 )
 
 __all__ = [
+    # Common
+    "ProductModel",
     # Matrices
     "MatricesKitCollection",
     "GoodsMatrixKitModel",
@@ -39,10 +45,12 @@ __all__ = [
     # Products
     "ProductsKitCollection",
     "ProductKitModel",
+    # Recipes
+    "RecipesKitCollection",
+    "RecipeKitModel",
     # Sales
     "SalesKitCollection",
     "SaleKitModel",
-    "SalesProductModel",
     # Vending Machines
     "VendingMachinesCollection",
     "VendingMachineModel",

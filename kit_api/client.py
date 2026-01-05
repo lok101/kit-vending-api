@@ -1,12 +1,22 @@
 import hashlib
 import json
+import os
 from datetime import datetime
 from enum import IntEnum
 from typing import Mapping, Any
 
 import aiohttp
-import requests
+from aiohttp import ClientError as AioHTTPClientError, ContentTypeError
+from dotenv import load_dotenv
 
+from kit_api.models import RecipesKitCollection
+from kit_api.exceptions import (
+    KitAPIError,
+    KitAPIAuthError,
+    KitAPINetworkError,
+    KitAPIResponseError,
+    KitAPIValidationError,
+)
 from kit_api.models import (
     MatricesKitCollection,
     ProductsKitCollection,
@@ -23,7 +33,16 @@ class ResultCodes(IntEnum):
     TOO_MANY_REQUEST = 27
 
 
-@rate_limit(1, 10)
+load_dotenv()
+
+try:
+    max_requests = int(os.getenv("KIT_API_REQUEST_PER_WINDOW", 1))
+    time_window = int(os.getenv("KIT_API_WINDOW_SECONDS", 10))
+except ValueError as e:
+    raise KitAPIValidationError("KIT_API_REQUEST_PER_WINDOW and KIT_API_WINDOW_SECONDS (.env) должны быть числами.")
+
+
+@rate_limit(max_requests, time_window)
 class KitVendingAPIClient:
     """
     Клиент для работы с Kit Vending API (api2.kit-invest.ru)
@@ -34,25 +53,51 @@ class KitVendingAPIClient:
         company_id: ID компании
         timestamp_provider: Провайдер для получения timestamp (по умолчанию TimestampAPI)
     """
-    
+
     def __init__(
-        self, 
-        login: str, 
-        password: str, 
-        company_id: str, 
-        timestamp_provider: TimestampAPI | None = None
+            self,
+            login: str | None = None,
+            password: str | None = None,
+            company_id: str | None = None,
+            timestamp_provider: TimestampAPI | None = None,
+            session: aiohttp.ClientSession | None = None
     ):
+        """
+        Args:
+            login: Логин для авторизации
+            password: Пароль для авторизации
+            company_id: ID компании
+            timestamp_provider: Провайдер для получения timestamp (по умолчанию TimestampAPI)
+            session: HTTP сессия для переиспользования (опционально)
+        """
+
         self._timestamp_provider = timestamp_provider or TimestampAPI()
-        self._login = login
-        self._password = password
-        self._company_id = company_id
+        self._login = login or os.getenv("KIT_API_LOGIN")
+        self._password = password or os.getenv("KIT_API_PASSWORD")
+        self._company_id = company_id or os.getenv("KIT_API_COMPANY_ID")
         self._base_url = "https://api2.kit-invest.ru/APIService.svc"
+        self._session = session
+        self._own_session = session is None
+
+        # Валидация обязательных параметров
+        if not self._login:
+            raise KitAPIValidationError(
+                "Не указан login. Передайте login в конструктор или установите переменную окружения KIT_API_LOGIN"
+            )
+        if not self._password:
+            raise KitAPIValidationError(
+                "Не указан password. Передайте password в конструктор или установите переменную окружения KIT_API_PASSWORD"
+            )
+        if not self._company_id:
+            raise KitAPIValidationError(
+                "Не указан company_id. Передайте company_id в конструктор или установите переменную окружения KIT_API_COMPANY_ID"
+            )
 
     async def get_sales(
-        self, 
-        vending_machine_id: int, 
-        from_date: datetime, 
-        to_date: datetime
+            self,
+            vending_machine_id: int,
+            from_date: datetime,
+            to_date: datetime
     ) -> SalesKitCollection:
         """
         Получить продажи по торговому автомату за период
@@ -104,6 +149,20 @@ class KitVendingAPIClient:
 
         return products_collection
 
+    async def get_recipes(self) -> RecipesKitCollection:
+        """Получить список рецептов напитков."""
+        endpoint = "/GetFormulations"
+        request_id = await self._timestamp_provider.async_get_now()
+        url = f"{self._base_url}{endpoint}"
+        data = {
+            "Auth": self._build_auth(request_id),
+        }
+
+        response = await self._async_send_post_request(url, data)
+        models = RecipesKitCollection.model_validate(response)
+
+        return models
+
     async def get_product_matrices(self) -> MatricesKitCollection:
         """
         Получить матрицы товаров
@@ -154,40 +213,69 @@ class KitVendingAPIClient:
             "Sign": sign,
         }
 
-    @staticmethod
-    async def _async_send_post_request(url: str, data: Mapping) -> Mapping:
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Получить HTTP сессию, создав её при необходимости"""
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession()
+            self._own_session = True
+        return self._session
+
+    async def _async_send_post_request(self, url: str, data: Mapping) -> Mapping:
         """Отправить асинхронный POST запрос"""
+        session = await self._get_session()
+
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url=url, data=json.dumps(data)) as response:
-                    response.raise_for_status()
+            async with session.post(url=url, data=json.dumps(data)) as response:
+                response.raise_for_status()
+
+                try:
                     response_data = await response.json()
+                except (ContentTypeError, json.JSONDecodeError) as e:
+                    raise KitAPIResponseError(
+                        f"Не удалось разобрать JSON ответ от API: {e}",
+                        result_code=-1
+                    )
+
+                try:
                     result_code = response_data['ResultCode']
+                except KeyError:
+                    raise KitAPIResponseError(
+                        "Ответ API не содержит поле ResultCode",
+                        result_code=-1
+                    )
 
-                    if result_code != ResultCodes.SUCCESS:
-                        message = response_data.get("ErrorMessage", "Неизвестная ошибка")
-                        raise Exception(
-                            f'Не удалось получить данные от Kit API, код ответа - {result_code}, текст ошибки: {message}'
-                        )
+                if result_code == ResultCodes.TOO_MANY_REQUEST:
+                    raise KitAPIResponseError(
+                        f"Превышен лимит запросов к API. Код ответа: {result_code}",
+                        result_code=result_code
+                    )
 
-                    return response_data
+                if result_code != ResultCodes.SUCCESS:
+                    message = response_data.get("ErrorMessage", "Неизвестная ошибка")
+                    raise KitAPIResponseError(
+                        f'Не удалось получить данные от Kit API, код ответа - {result_code}, текст ошибки: {message}',
+                        result_code=result_code
+                    )
 
-        except aiohttp.ClientError as e:
-            raise Exception(f"Ошибка сети: {e}")
+                return response_data
 
-    @staticmethod
-    def _send_post_request(url: str, data: Mapping) -> Mapping:
-        """Отправить синхронный POST запрос"""
-        response = requests.post(url, data=json.dumps(data))
-        response.raise_for_status()
-        response_data = response.json()
-        result_code = response_data['ResultCode']
+        except AioHTTPClientError as e:
+            raise KitAPINetworkError(f"Ошибка сети: {e}") from e
+        except KitAPIResponseError:
+            raise
+        except Exception as e:
+            raise KitAPIError(f"Неожиданная ошибка при выполнении запроса: {e}") from e
 
-        if result_code != ResultCodes.SUCCESS:
-            message = response_data.get("ErrorMessage", "Неизвестная ошибка")
-            raise Exception(
-                f'Не удалось получить данные от Kit API, код ответа - {result_code}, текст ошибки: {message}'
-            )
+    async def close(self):
+        """Закрыть HTTP сессию, если она была создана клиентом"""
+        if self._session and not self._session.closed and self._own_session:
+            await self._session.close()
+            self._session = None
 
-        return response_data
+    async def __aenter__(self):
+        """Асинхронный контекстный менеджер: вход"""
+        return self
 
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Асинхронный контекстный менеджер: выход (закрытие сессии)"""
+        await self.close()

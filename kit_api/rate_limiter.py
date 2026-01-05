@@ -3,6 +3,7 @@
 """
 
 import asyncio
+import inspect
 import time
 from collections import deque
 from typing import Deque
@@ -72,7 +73,7 @@ def rate_limit(max_requests: int, time_window: float = 1.0):
 
             attr = getattr(cls, attr_name)
             # Если это асинхронный метод, оборачиваем его
-            if callable(attr) and asyncio.iscoroutinefunction(attr):
+            if callable(attr) and inspect.iscoroutinefunction(attr):
                 setattr(cls, attr_name, _wrap_method(attr, limiter))
 
         # Добавляем ограничитель как атрибут класса
