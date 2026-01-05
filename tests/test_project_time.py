@@ -98,4 +98,3 @@ class TestProjectTime:
         assert result.minute == 59
         assert result.second == 59
 
-

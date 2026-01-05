@@ -60,4 +60,3 @@ class TestExceptions:
         assert error.result_code == 27
         assert str(error) == "Error message"
 
-

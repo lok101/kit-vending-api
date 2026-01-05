@@ -168,4 +168,3 @@ class TestRateLimitDecorator:
         # Оба вызова должны пройти быстро (без ожидания)
         assert elapsed < 0.1
 
-

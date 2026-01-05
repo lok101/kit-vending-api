@@ -53,4 +53,3 @@ class TestProductModel:
         assert product.code is None
         assert product.name == "Test Product"
 
-
