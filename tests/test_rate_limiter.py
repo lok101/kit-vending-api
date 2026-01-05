@@ -1,6 +1,7 @@
 """
 Тесты для RateLimiter
 """
+import inspect
 
 import pytest
 import asyncio
@@ -100,10 +101,10 @@ class TestRateLimitDecorator:
 
         # Асинхронный метод должен быть обернут
         assert hasattr(TestClass, '_limiter')
-        assert asyncio.iscoroutinefunction(instance.async_method)
+        assert inspect.iscoroutinefunction(instance.async_method)
 
         # Синхронный метод не должен быть обернут
-        assert not asyncio.iscoroutinefunction(instance.sync_method)
+        assert not inspect.iscoroutinefunction(instance.sync_method)
 
     @pytest.mark.asyncio
     async def test_rate_limit_decorator_limits_calls(self):
