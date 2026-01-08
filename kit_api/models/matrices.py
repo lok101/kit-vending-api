@@ -3,47 +3,25 @@
 """
 
 from typing import Literal, Union, Annotated
-from pydantic import BaseModel, Field, Tag, BeforeValidator
+from pydantic import BaseModel, Field, Tag
 
-from kit_api.models.common import ProductModel
-
-
-class GoodsMatrixCell(BaseModel):
-    line_number: Annotated[int, Field(validation_alias="LineNumber")]
-    product: Annotated[ProductModel, Field(validation_alias="GoodsName"), BeforeValidator(ProductModel.create)]
-    price: Annotated[float, Field(validation_alias="Price2")]
-    capacity: Annotated[int | None, Field(validation_alias="MaxCount")]
-
-    def as_dict(self) -> dict[str, int | float | str]:
-        return {
-            "line_number": self.line_number,
-            "price": self.price,
-            "capacity": self.capacity,
-            "product_code": self.product.code,
-            "product_name": self.product.name,
-        }
-
-
-class RecipeMatrixCell(BaseModel):
-    line_number: Annotated[int, Field(validation_alias="LineNumber")]
-    recipe_id: Annotated[int, Field(validation_alias="FormulationId")]
-    price: Annotated[float | None, Field(validation_alias="Price2")]
+from kit_api.models.cells import GoodsCell, BaseMatrixCell, RecipeCell
 
 
 class MatrixKitModel(BaseModel):
     id: Annotated[int, Field(validation_alias="MatrixId")]
     name: Annotated[str, Field(validation_alias="MatrixName")]
-    cells: Annotated[list[GoodsMatrixCell | RecipeMatrixCell], Field(validation_alias="Details")]
+    cells: Annotated[list[BaseMatrixCell], Field(validation_alias="Details")]
 
 
 class GoodsMatrixKitModel(MatrixKitModel):
     type: Literal[1] = Field(validation_alias="MatrixType")
-    cells: Annotated[list[GoodsMatrixCell], Field(validation_alias="Details")]
+    cells: Annotated[list[GoodsCell], Field(validation_alias="Details")]
 
 
 class RecipeMatrixKitModel(MatrixKitModel):
     type: Literal[2] = Field(validation_alias="MatrixType")
-    cells: Annotated[list[RecipeMatrixCell], Field(validation_alias="Details")]
+    cells: Annotated[list[RecipeCell], Field(validation_alias="Details")]
 
 
 class ComboMatrixKitModel(MatrixKitModel):

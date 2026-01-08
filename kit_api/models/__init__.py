@@ -9,8 +9,8 @@ from kit_api.models.matrices import (
     RecipeMatrixKitModel,
     ComboMatrixKitModel,
     MatrixKitModel,
-    GoodsMatrixCell,
-    RecipeMatrixCell,
+    GoodsCell,
+    RecipeCell,
 )
 from kit_api.models.products import (
     ProductsKitCollection,
@@ -41,8 +41,8 @@ __all__ = [
     "RecipeMatrixKitModel",
     "ComboMatrixKitModel",
     "MatrixKitModel",
-    "GoodsMatrixCell",
-    "RecipeMatrixCell",
+    "GoodsCell",
+    "RecipeCell",
     # Products
     "ProductsKitCollection",
     "ProductKitModel",
@@ -51,7 +51,6 @@ __all__ = [
     "RecipeKitModel",
     # Sales
     "SalesCollection",
-    "SaleModel",
     # Vending Machines
     "VendingMachinesCollection",
     "VendingMachineModel",
