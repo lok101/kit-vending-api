@@ -7,35 +7,31 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, BeforeValidator
 
-from kit_api.models.common import ProductModel
-from kit_api.project_time import ProjectTime
 
-
-class SaleKitModel(BaseModel):
-    """Модель продажи из Kit API"""
+class BaseSaleModel(BaseModel):
     line: Annotated[int, Field(validation_alias="LineNumber")]
-    product: Annotated[ProductModel, Field(validation_alias="GoodsName"), BeforeValidator(ProductModel.create)]
     price: Annotated[float, Field(validation_alias="Sum")]
-    timestamp: Annotated[datetime, Field(validation_alias="DateTime"), BeforeValidator(
-        ProjectTime.datetime_from_str_kit
-    )]
-    vm_id: Annotated[int, Field(validation_alias="VendingMachine")]
-    vm_name: Annotated[str, Field(validation_alias="VendingMachineName")]
+    timestamp: Annotated[
+        datetime,
+        Field(validation_alias="DateTime"),
+        BeforeValidator(
+            lambda val: datetime.strptime(val, "%d.%m.%Y %H:%M:%S")
+        )
+    ]
+
+    vending_machine_id: Annotated[int, Field(validation_alias="VendingMachine")]
+    vending_machine_name: Annotated[str, Field(validation_alias="VendingMachineName")]
     matrix_id: Annotated[int, Field(validation_alias="MatrixId")]
 
-    def as_dict(self) -> dict:
-        """Преобразовать в словарь"""
-        return {
-            "product_code": self.product.code,
-            "product_name": self.product.name,
-            "line_number": self.line,
-            "matrix_id": self.matrix_id,
-            "price": self.price,
-            "timestamp": self.timestamp,
-        }
+
+class RecipeDrinkSaleModel(BaseSaleModel):
+    recipe_id: Annotated[int, Field(validation_alias="FormulationId")]
 
 
-class SalesKitCollection(BaseModel):
+class ProductSaleModel(BaseSaleModel):
+    product_name: Annotated[str, Field(validation_alias="GoodsName")]
+
+
+class SalesCollection(BaseModel):
     """Коллекция продаж из Kit API"""
-    items: Annotated[list[SaleKitModel], Field(validation_alias="Sales")]
-
+    items: Annotated[list[ProductSaleModel], Field(validation_alias="Sales")]

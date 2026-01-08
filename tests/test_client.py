@@ -16,6 +16,7 @@ from kit_api.exceptions import (
     KitAPIResponseError,
     KitAPINetworkError,
     KitAPIError,
+    KitAPIAuthError,
 )
 
 
@@ -47,11 +48,13 @@ class TestKitVendingAPIClientInit:
         assert client._password == api_credentials["password"]
         assert client._company_id == api_credentials["company_id"]
 
-    def test_init_without_credentials_raises_error(self):
-        """Тест что инициализация без учетных данных вызывает ошибку"""
-        with patch("kit_api.client.load_dotenv"), patch("os.getenv", return_value=None):
-            with pytest.raises(KitAPIValidationError, match="Не указан login"):
-                KitVendingAPIClient()
+    def test_init_without_credentials(self):
+        """Тест что инициализация без учетных данных не вызывает ошибку"""
+        client = KitVendingAPIClient()
+        assert client._login is None
+        assert client._password is None
+        assert client._company_id is None
+        assert not client.is_authenticated()
 
     def test_init_with_session(self, api_credentials):
         """Тест инициализации с переданной сессией"""
@@ -76,6 +79,65 @@ class TestKitVendingAPIClientInit:
         assert client._own_session is True
 
 
+class TestAuthMethods:
+    """Тесты методов авторизации"""
+
+    def test_login(self):
+        """Тест установки учётных данных"""
+        client = KitVendingAPIClient()
+        client.login("test_login", "test_password", "test_company_id")
+        
+        assert client._login == "test_login"
+        assert client._password == "test_password"
+        assert client._company_id == "test_company_id"
+        assert client.is_authenticated()
+
+    def test_login_empty_login_raises_error(self):
+        """Тест что установка пустого login вызывает ошибку"""
+        client = KitVendingAPIClient()
+        with pytest.raises(KitAPIValidationError, match="login не может быть пустым"):
+            client.login("", "password", "company_id")
+
+    def test_login_empty_password_raises_error(self):
+        """Тест что установка пустого password вызывает ошибку"""
+        client = KitVendingAPIClient()
+        with pytest.raises(KitAPIValidationError, match="password не может быть пустым"):
+            client.login("login", "", "company_id")
+
+    def test_login_empty_company_id_raises_error(self):
+        """Тест что установка пустого company_id вызывает ошибку"""
+        client = KitVendingAPIClient()
+        with pytest.raises(KitAPIValidationError, match="company_id не может быть пустым"):
+            client.login("login", "password", "")
+
+    def test_logout(self, api_credentials):
+        """Тест удаления учётных данных"""
+        client = KitVendingAPIClient(
+            login=api_credentials["login"],
+            password=api_credentials["password"],
+            company_id=api_credentials["company_id"]
+        )
+        assert client.is_authenticated()
+        
+        client.logout()
+        
+        assert client._login is None
+        assert client._password is None
+        assert client._company_id is None
+        assert not client.is_authenticated()
+
+    def test_is_authenticated(self):
+        """Тест проверки статуса авторизации"""
+        client = KitVendingAPIClient()
+        assert not client.is_authenticated()
+        
+        client.login("login", "password", "company_id")
+        assert client.is_authenticated()
+        
+        client.logout()
+        assert not client.is_authenticated()
+
+
 class TestBuildAuth:
     """Тесты построения объекта авторизации"""
 
@@ -94,6 +156,14 @@ class TestBuildAuth:
         assert auth["UserLogin"] == api_credentials["login"]
         assert "Sign" in auth
         assert len(auth["Sign"]) == 32  # MD5 hash length
+
+    def test_build_auth_without_credentials_raises_error(self):
+        """Тест что построение объекта авторизации без учётных данных вызывает ошибку"""
+        client = KitVendingAPIClient()
+        request_id = 1234567890
+        
+        with pytest.raises(KitAPIAuthError, match="Учётные данные не установлены"):
+            client._build_auth(request_id)
 
 
 class TestGetSession:
@@ -283,6 +353,16 @@ class TestAPIMethods:
     """Тесты методов API"""
 
     @pytest.mark.asyncio
+    async def test_get_sales_without_auth_raises_error(self, mock_timestamp_provider):
+        """Тест что запрос без учётных данных вызывает ошибку"""
+        client = KitVendingAPIClient(timestamp_provider=mock_timestamp_provider)
+        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo('Europe/Moscow'))
+        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo('Europe/Moscow'))
+        
+        with pytest.raises(KitAPIAuthError, match="Учётные данные не установлены"):
+            await client.get_sales(1, from_date, to_date)
+
+    @pytest.mark.asyncio
     async def test_get_sales(self, api_credentials, mock_timestamp_provider):
         """Тест получения продаж"""
         client = KitVendingAPIClient(
@@ -315,6 +395,14 @@ class TestAPIMethods:
         await client.close()
 
     @pytest.mark.asyncio
+    async def test_get_products_without_auth_raises_error(self, mock_timestamp_provider):
+        """Тест что запрос без учётных данных вызывает ошибку"""
+        client = KitVendingAPIClient(timestamp_provider=mock_timestamp_provider)
+        
+        with pytest.raises(KitAPIAuthError, match="Учётные данные не установлены"):
+            await client.get_products()
+
+    @pytest.mark.asyncio
     async def test_get_products(self, api_credentials, mock_timestamp_provider):
         """Тест получения товаров"""
         client = KitVendingAPIClient(
@@ -341,6 +429,14 @@ class TestAPIMethods:
 
         assert result is not None
         await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_recipes_without_auth_raises_error(self, mock_timestamp_provider):
+        """Тест что запрос без учётных данных вызывает ошибку"""
+        client = KitVendingAPIClient(timestamp_provider=mock_timestamp_provider)
+        
+        with pytest.raises(KitAPIAuthError, match="Учётные данные не установлены"):
+            await client.get_recipes()
 
     @pytest.mark.asyncio
     async def test_get_recipes(self, api_credentials, mock_timestamp_provider):
@@ -371,6 +467,14 @@ class TestAPIMethods:
         await client.close()
 
     @pytest.mark.asyncio
+    async def test_get_product_matrices_without_auth_raises_error(self, mock_timestamp_provider):
+        """Тест что запрос без учётных данных вызывает ошибку"""
+        client = KitVendingAPIClient(timestamp_provider=mock_timestamp_provider)
+        
+        with pytest.raises(KitAPIAuthError, match="Учётные данные не установлены"):
+            await client.get_product_matrices()
+
+    @pytest.mark.asyncio
     async def test_get_product_matrices(self, api_credentials, mock_timestamp_provider):
         """Тест получения матриц товаров"""
         client = KitVendingAPIClient(
@@ -397,6 +501,14 @@ class TestAPIMethods:
 
         assert result is not None
         await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_vending_machines_without_auth_raises_error(self, mock_timestamp_provider):
+        """Тест что запрос без учётных данных вызывает ошибку"""
+        client = KitVendingAPIClient(timestamp_provider=mock_timestamp_provider)
+        
+        with pytest.raises(KitAPIAuthError, match="Учётные данные не установлены"):
+            await client.get_vending_machines()
 
     @pytest.mark.asyncio
     async def test_get_vending_machines(self, api_credentials, mock_timestamp_provider):
