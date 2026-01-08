@@ -20,9 +20,10 @@ from kit_api.exceptions import (
 from kit_api.models import (
     MatricesKitCollection,
     ProductsKitCollection,
-    SalesKitCollection,
+    SalesCollection,
     VendingMachinesCollection,
 )
+from kit_api.models.sales import ProductSaleModel
 from kit_api.timestamp_api import TimestampAPI
 from kit_api.project_time import ProjectTime
 from kit_api.rate_limiter import rate_limit
@@ -46,12 +47,6 @@ except ValueError as e:
 class KitVendingAPIClient:
     """
     Клиент для работы с Kit Vending API (api2.kit-invest.ru)
-    
-    Args:
-        login: Логин для авторизации
-        password: Пароль для авторизации
-        company_id: ID компании
-        timestamp_provider: Провайдер для получения timestamp (по умолчанию TimestampAPI)
     """
 
     def __init__(
@@ -64,41 +59,32 @@ class KitVendingAPIClient:
     ):
         """
         Args:
-            login: Логин для авторизации
-            password: Пароль для авторизации
-            company_id: ID компании
+            login: Логин для авторизации (опционально, можно установить позже через login())
+            password: Пароль для авторизации (опционально, можно установить позже через login())
+            company_id: ID компании (опционально, можно установить позже через login())
             timestamp_provider: Провайдер для получения timestamp (по умолчанию TimestampAPI)
             session: HTTP сессия для переиспользования (опционально)
         """
-
         self._timestamp_provider = timestamp_provider or TimestampAPI()
-        self._login = login or os.getenv("KIT_API_LOGIN")
-        self._password = password or os.getenv("KIT_API_PASSWORD")
-        self._company_id = company_id or os.getenv("KIT_API_COMPANY_ID")
         self._base_url = "https://api2.kit-invest.ru/APIService.svc"
         self._session = session
         self._own_session = session is None
-
-        # Валидация обязательных параметров
-        if not self._login:
-            raise KitAPIValidationError(
-                "Не указан login. Передайте login в конструктор или установите переменную окружения KIT_API_LOGIN"
-            )
-        if not self._password:
-            raise KitAPIValidationError(
-                "Не указан password. Передайте password в конструктор или установите переменную окружения KIT_API_PASSWORD"
-            )
-        if not self._company_id:
-            raise KitAPIValidationError(
-                "Не указан company_id. Передайте company_id в конструктор или установите переменную окружения KIT_API_COMPANY_ID"
-            )
+        
+        # Учётные данные изначально не заданы
+        self._login: str | None = None
+        self._password: str | None = None
+        self._company_id: str | None = None
+        
+        # Если учётные данные переданы при инициализации, устанавливаем их
+        if login and password and company_id:
+            self.login(login, password, company_id)
 
     async def get_sales(
             self,
             vending_machine_id: int,
             from_date: datetime,
             to_date: datetime
-    ) -> SalesKitCollection:
+    ) -> SalesCollection:
         """
         Получить продажи по торговому автомату за период
         
@@ -108,7 +94,7 @@ class KitVendingAPIClient:
             to_date: Конечная дата
             
         Returns:
-            SalesKitCollection: Коллекция продаж
+            SalesCollection: Коллекция продаж
         """
         endpoint = "/GetSales"
         request_id = await self._timestamp_provider.async_get_now()
@@ -126,7 +112,18 @@ class KitVendingAPIClient:
         }
 
         response = await self._async_send_post_request(url, data)
-        sales_collection = SalesKitCollection.model_validate(response)
+
+        res = []
+
+        for sale in response["Sales"]:
+            product_name = sale.get("GoodsName")
+
+            if product_name is not None:
+                res.append(
+                    ProductSaleModel.model_validate(sale)
+                )
+
+        sales_collection = SalesCollection.model_validate(response)
 
         return sales_collection
 
@@ -201,8 +198,34 @@ class KitVendingAPIClient:
 
         return collection
 
+    def login(self, login: str, password: str, company_id: str) -> None:
+        """Установить учётные данные для авторизации"""
+        if not login:
+            raise KitAPIValidationError("login не может быть пустым")
+        if not password:
+            raise KitAPIValidationError("password не может быть пустым")
+        if not company_id:
+            raise KitAPIValidationError("company_id не может быть пустым")
+        
+        self._login = login
+        self._password = password
+        self._company_id = company_id
+
+    def logout(self) -> None:
+        """Удалить учётные данные"""
+        self._login = None
+        self._password = None
+        self._company_id = None
+
+    def is_authenticated(self) -> bool:
+        """Проверить, установлены ли учётные данные"""
+        return self._login is not None and self._password is not None and self._company_id is not None
+
     def _build_auth(self, request_id: int) -> dict[str, Any]:
         """Построить объект авторизации"""
+        if not self.is_authenticated():
+            raise KitAPIAuthError("Учётные данные не установлены. Используйте метод login() для установки учётных данных.")
+        
         sign = hashlib.md5(
             f"{self._company_id}{self._password}{request_id}".encode("utf-8")
         ).hexdigest()

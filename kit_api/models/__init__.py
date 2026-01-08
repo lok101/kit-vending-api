@@ -21,8 +21,9 @@ from kit_api.models.recipes import (
     RecipeKitModel,
 )
 from kit_api.models.sales import (
-    SalesKitCollection,
-    SaleKitModel,
+    SalesCollection,
+    ProductSaleModel,
+    RecipeDrinkSaleModel
 )
 from kit_api.models.vending_machines import (
     VendingMachinesCollection,
@@ -49,12 +50,11 @@ __all__ = [
     "RecipesKitCollection",
     "RecipeKitModel",
     # Sales
-    "SalesKitCollection",
-    "SaleKitModel",
+    "SalesCollection",
+    "SaleModel",
     # Vending Machines
     "VendingMachinesCollection",
     "VendingMachineModel",
     "VendingMachineStateModel",
     "VendingMachineStatesCollection",
 ]
-
