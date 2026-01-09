@@ -16,3 +16,5 @@ class ProductsKitCollection(BaseModel):
     """Коллекция товаров из Kit API"""
     items: Annotated[list[ProductKitModel], Field(validation_alias="Goods")]
 
+    def get_all(self) -> list[ProductKitModel]:
+        return self.items.copy()

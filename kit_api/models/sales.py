@@ -1,7 +1,3 @@
-"""
-Модели продаж Kit API
-"""
-
 from datetime import datetime
 from typing import Annotated
 
@@ -33,5 +29,13 @@ class ProductSaleModel(BaseSaleModel):
 
 
 class SalesCollection(BaseModel):
-    """Коллекция продаж из Kit API"""
-    items: Annotated[list[ProductSaleModel], Field(validation_alias="Sales")]
+    items: Annotated[list[BaseSaleModel], Field(validation_alias="Sales")]
+
+    def get_product_sales(self) -> list[ProductSaleModel]:
+        return [sale for sale in self.items if isinstance(sale, ProductSaleModel)]
+
+    def get_drink_sales(self) -> list[RecipeDrinkSaleModel]:
+        return [sale for sale in self.items if isinstance(sale, RecipeDrinkSaleModel)]
+
+    def get_all(self) -> list[BaseSaleModel]:
+        return self.items.copy()

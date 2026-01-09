@@ -48,3 +48,6 @@ class MatricesKitCollection(BaseModel):
     def get_recipes_matrices(self) -> list[RecipeMatrixKitModel]:
         """Получить только матрицы товаров (тип 2)"""
         return [item for item in self.items if isinstance(item, RecipeMatrixKitModel)]
+
+    def get_all_matrices(self) -> list[MatrixKitModel]:
+        return self.items.copy()
