@@ -23,7 +23,7 @@ from kit_api.models import (
     GoodsMatrixKitModel,
     RecipeMatrixKitModel,
     ComboMatrixKitModel,
-    RecipeKitModel
+    RecipeKitModel, ProductSaleModel, RecipeDrinkSaleModel
 )
 
 __version__ = "0.1.0"
@@ -49,5 +49,7 @@ __all__ = [
     "RecipeMatrixKitModel",
     "ComboMatrixKitModel",
     "RecipeKitModel",
+    "ProductSaleModel",
+    "RecipeDrinkSaleModel",
 ]
 

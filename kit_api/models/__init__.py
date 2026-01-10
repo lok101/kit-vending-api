@@ -28,8 +28,6 @@ from kit_api.models.sales import (
 from kit_api.models.vending_machines import (
     VendingMachinesCollection,
     VendingMachineModel,
-    VendingMachineStateModel,
-    VendingMachineStatesCollection,
 )
 
 __all__ = [
@@ -51,9 +49,9 @@ __all__ = [
     "RecipeKitModel",
     # Sales
     "SalesCollection",
+    "ProductSaleModel",
+    "RecipeDrinkSaleModel",
     # Vending Machines
     "VendingMachinesCollection",
     "VendingMachineModel",
-    "VendingMachineStateModel",
-    "VendingMachineStatesCollection",
 ]
