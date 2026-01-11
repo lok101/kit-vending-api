@@ -53,7 +53,7 @@ class KitVendingAPIClient:
             self,
             login: str | None = None,
             password: str | None = None,
-            company_id: str | None = None,
+            company_id: int | None = None,
             timestamp_provider: TimestampAPI | None = None,
             session: aiohttp.ClientSession | None = None
     ):
@@ -73,7 +73,7 @@ class KitVendingAPIClient:
         # Учётные данные изначально не заданы
         self._login: str | None = None
         self._password: str | None = None
-        self._company_id: str | None = None
+        self._company_id: int | None = None
         
         # Если учётные данные переданы при инициализации, устанавливаем их
         if login and password and company_id:
@@ -198,7 +198,7 @@ class KitVendingAPIClient:
 
         return collection
 
-    def login(self, login: str, password: str, company_id: str) -> None:
+    def login(self, login: str, password: str, company_id: int) -> None:
         """Установить учётные данные для авторизации"""
         if not login:
             raise KitAPIValidationError("login не может быть пустым")
