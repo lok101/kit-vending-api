@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, Field, BeforeValidator
 
@@ -28,8 +28,22 @@ class ProductSaleModel(BaseSaleModel):
     product_name: Annotated[str, Field(validation_alias="GoodsName")]
 
 
+def _create_sale_model(data: dict[str, Any]) -> BaseSaleModel:
+    """Создает RecipeDrinkSaleModel или ProductSaleModel на основе полей данных"""
+    if "FormulationId" in data:
+        return RecipeDrinkSaleModel(**data)
+    elif "GoodsName" in data:
+        return ProductSaleModel(**data)
+    else:
+        return BaseSaleModel(**data)
+
+
 class SalesCollection(BaseModel):
-    items: Annotated[list[BaseSaleModel], Field(validation_alias="Sales")]
+    items: Annotated[
+        list[BaseSaleModel],
+        Field(validation_alias="Sales"),
+        BeforeValidator(lambda val: [_create_sale_model(item) for item in val])
+    ]
 
     def get_product_sales(self) -> list[ProductSaleModel]:
         return [sale for sale in self.items if isinstance(sale, ProductSaleModel)]
