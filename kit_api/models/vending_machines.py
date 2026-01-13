@@ -13,6 +13,7 @@ class VendingMachineModel(BaseModel):
     name: Annotated[str, Field(validation_alias="VendingMachineName")]
     matrix_id: Annotated[int | None, Field(validation_alias="GoodsMatrix")]
     number: Annotated[int, Field(validation_alias="AutomatNumber")]
+    company_id: Annotated[int, Field(validation_alias="CompanyId")]
 
 
 class ActiveVendingMachineModel(VendingMachineModel):
