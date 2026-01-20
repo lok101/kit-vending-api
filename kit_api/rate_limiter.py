@@ -9,6 +9,65 @@ from collections import deque
 from typing import Deque
 
 
+class GlobalBackoff:
+    """
+    Механизм глобальной блокировки при превышении лимита API (код TOO_MANY_REQUEST).
+    Все запросы ждут, пока backoff активен.
+    """
+
+    def __init__(self, timeout: float = 60.0):
+        self._timeout = timeout
+        self._event: asyncio.Event | None = None
+        self._lock: asyncio.Lock | None = None
+        self._backoff_task: asyncio.Task | None = None
+
+    def _ensure_initialized(self):
+        """Ленивая инициализация asyncio примитивов в текущем event loop."""
+        if self._event is None:
+            self._event = asyncio.Event()
+            self._event.set()
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+
+    async def wait_if_blocked(self):
+        """Ждать, если активен backoff."""
+        self._ensure_initialized()
+        await self._event.wait()
+
+    async def trigger_backoff(self):
+        """
+        Активировать глобальный backoff.
+        Все запросы будут ждать timeout секунд.
+        Если backoff уже активен, просто ждём его завершения.
+        """
+        self._ensure_initialized()
+
+        async with self._lock:
+            if not self._event.is_set():
+                # Backoff уже активен, ждём его завершения
+                pass
+            else:
+                # Активируем backoff
+                self._event.clear()
+                self._backoff_task = asyncio.create_task(self._backoff_timer())
+
+        # Ждём завершения backoff вне lock
+        await self._event.wait()
+
+    async def _backoff_timer(self):
+        """Таймер backoff, разблокирует после timeout."""
+        try:
+            await asyncio.sleep(self._timeout)
+        finally:
+            self._event.set()
+            self._backoff_task = None
+
+    def is_blocked(self) -> bool:
+        if self._event is None:
+            return False
+        return not self._event.is_set()
+
+
 class RateLimiter:
     """
     Упрощенный ограничитель запросов для одного API с одним набором лимитов.
