@@ -17,7 +17,11 @@ class BaseSaleModel(BaseModel):
 
     vending_machine_id: Annotated[int, Field(validation_alias="VendingMachine")]
     vending_machine_name: Annotated[str, Field(validation_alias="VendingMachineName")]
-    matrix_id: Annotated[int, Field(validation_alias="MatrixId")]
+    matrix_id: Annotated[
+        int | None,
+        Field(validation_alias="MatrixId"),
+        BeforeValidator(lambda val: int(val) if val else None)
+    ]
 
 
 class RecipeDrinkSaleModel(BaseSaleModel):
