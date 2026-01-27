@@ -112,12 +112,13 @@ class KitVendingAPIClient:
                 }
             }
             if vending_machine_id is not None:
-                filter_data["VendingMachineId"] = vending_machine_id
+                filter_data["Filter"]["VendingMachineId"] = vending_machine_id
 
             return {
                 "Auth": self._build_auth(request_id),
                 **filter_data
             }
+
 
         response = await self._async_send_post_request(url, build_data)
         sales_collection = SalesCollection.model_validate(response)
