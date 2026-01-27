@@ -24,7 +24,7 @@ from kit_api.models import (
     VendingMachinesCollection,
 )
 from kit_api.timestamp_api import TimestampAPI
-from kit_api.project_time import ProjectTime
+from kit_api.project_time import LibDateTime
 from kit_api.rate_limiter import rate_limit, GlobalBackoff
 
 
@@ -100,8 +100,8 @@ class KitVendingAPIClient:
             SalesCollection: Коллекция продаж
         """
         url = f"{self._base_url}/GetSales"
-        to_dt_api_format = ProjectTime.datetime_to_str_kit(to_date)
-        from_dt_api_format = ProjectTime.datetime_to_str_kit(from_date)
+        to_dt_api_format = LibDateTime.datetime_to_str_kit(to_date)
+        from_dt_api_format = LibDateTime.datetime_to_str_kit(from_date)
 
         async def build_data() -> dict[str, Any]:
             request_id = await self._timestamp_provider.async_get_now()

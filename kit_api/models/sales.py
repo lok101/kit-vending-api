@@ -3,6 +3,8 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, Field, BeforeValidator
 
+from kit_api.project_time import LibDateTime
+
 
 class SaleModel(BaseModel):
     line: Annotated[int, Field(validation_alias="LineNumber")]
@@ -11,7 +13,7 @@ class SaleModel(BaseModel):
         datetime,
         Field(validation_alias="DateTime"),
         BeforeValidator(
-            lambda val: datetime.strptime(val, "%d.%m.%Y %H:%M:%S")
+            lambda val: LibDateTime.datetime_from_str_kit(val)
         )
     ]
     product_name: Annotated[str, Field(validation_alias="GoodsName")]
