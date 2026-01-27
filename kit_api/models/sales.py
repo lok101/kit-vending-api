@@ -4,7 +4,7 @@ from typing import Annotated, Any
 from pydantic import BaseModel, Field, BeforeValidator
 
 
-class BaseSaleModel(BaseModel):
+class SaleModel(BaseModel):
     line: Annotated[int, Field(validation_alias="LineNumber")]
     price: Annotated[float, Field(validation_alias="Sum")]
     timestamp: Annotated[
@@ -14,6 +14,7 @@ class BaseSaleModel(BaseModel):
             lambda val: datetime.strptime(val, "%d.%m.%Y %H:%M:%S")
         )
     ]
+    product_name: Annotated[str, Field(validation_alias="GoodsName")]
 
     vending_machine_id: Annotated[int, Field(validation_alias="VendingMachine")]
     vending_machine_name: Annotated[str, Field(validation_alias="VendingMachineName")]
@@ -24,36 +25,8 @@ class BaseSaleModel(BaseModel):
     ]
 
 
-class RecipeDrinkSaleModel(BaseSaleModel):
-    recipe_id: Annotated[int, Field(validation_alias="FormulationId")]
-
-
-class ProductSaleModel(BaseSaleModel):
-    product_name: Annotated[str, Field(validation_alias="GoodsName")]
-
-
-def _create_sale_model(data: dict[str, Any]) -> BaseSaleModel:
-    """Создает RecipeDrinkSaleModel или ProductSaleModel на основе полей данных"""
-    if "FormulationId" in data:
-        return RecipeDrinkSaleModel(**data)
-    elif "GoodsName" in data:
-        return ProductSaleModel(**data)
-    else:
-        return BaseSaleModel(**data)
-
-
 class SalesCollection(BaseModel):
-    items: Annotated[
-        list[BaseSaleModel],
-        Field(validation_alias="Sales"),
-        BeforeValidator(lambda val: [_create_sale_model(item) for item in val])
-    ]
+    items: Annotated[list[SaleModel], Field(validation_alias="Sales")]
 
-    def get_product_sales(self) -> list[ProductSaleModel]:
-        return [sale for sale in self.items if isinstance(sale, ProductSaleModel)]
-
-    def get_drink_sales(self) -> list[RecipeDrinkSaleModel]:
-        return [sale for sale in self.items if isinstance(sale, RecipeDrinkSaleModel)]
-
-    def get_all(self) -> list[BaseSaleModel]:
+    def get_all(self) -> list[SaleModel]:
         return self.items.copy()
