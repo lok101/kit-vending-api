@@ -4,16 +4,26 @@
 
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, BeforeValidator
+
+from kit_api.utils import extract_vending_machine_id, extract_status
 
 
 class VendingMachineModel(BaseModel):
-    """Модель торгового автомата из Kit API"""
+    """
+    Модель торгового автомата из Kit API
+    В имени закодированы номер аппарата и статус активности.
+
+    [ X ] - Аппарат не активен
+    [num] - номер аппарата
+
+    """
     id: Annotated[int, Field(validation_alias="VendingMachineId")]
     name: Annotated[str, Field(validation_alias="VendingMachineName")]
     matrix_id: Annotated[int | None, Field(validation_alias="GoodsMatrix")]
-    number: Annotated[int, Field(validation_alias="AutomatNumber")]
+    number: Annotated[int | None, Field(validation_alias="VendingMachineName"), BeforeValidator(extract_vending_machine_id)]
     company_id: Annotated[int, Field(validation_alias="CompanyId")]
+    is_active: Annotated[bool, Field(validation_alias="VendingMachineName"), BeforeValidator(extract_status)]
 
 
 class ActiveVendingMachineModel(VendingMachineModel):
