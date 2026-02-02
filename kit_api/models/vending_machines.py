@@ -23,7 +23,7 @@ class VendingMachineModel(BaseModel):
     matrix_id: Annotated[int | None, Field(validation_alias="GoodsMatrix")]
     number: Annotated[int | None, Field(validation_alias="VendingMachineName"), BeforeValidator(extract_vending_machine_id)]
     company_id: Annotated[int, Field(validation_alias="CompanyId")]
-    is_active: Annotated[bool, Field(validation_alias="VendingMachineName"), BeforeValidator(extract_status)]
+    # is_active: Annotated[bool, Field(validation_alias="VendingMachineName"), BeforeValidator(extract_status)]
 
 
 class ActiveVendingMachineModel(VendingMachineModel):
