@@ -8,6 +8,12 @@ def extract_vending_machine_id(vending_machine_name: str) -> int | None:
         return int(match.group(1))
     return None
 
+def extract_product_id(product_name: str) -> int | None:
+    pattern = r'(\d+) |]'
+    match = re.search(pattern, product_name)
+    if match:
+        return int(match.group(1))
+    return None
 
 def extract_status(vending_machine_name: str) -> bool:
     if "тест" in vending_machine_name.lower():

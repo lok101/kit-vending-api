@@ -47,9 +47,6 @@ except ValueError as e:
 
 @rate_limit(max_requests, time_window)
 class KitVendingAPIClient:
-    """
-    Клиент для работы с Kit Vending API (api2.kit-invest.ru)
-    """
 
     def __init__(
             self,
@@ -59,26 +56,17 @@ class KitVendingAPIClient:
             timestamp_provider: TimestampAPI | None = None,
             session: aiohttp.ClientSession | None = None
     ):
-        """
-        Args:
-            login: Логин для авторизации (опционально, можно установить позже через login())
-            password: Пароль для авторизации (опционально, можно установить позже через login())
-            company_id: ID компании (опционально, можно установить позже через login())
-            timestamp_provider: Провайдер для получения timestamp (по умолчанию TimestampAPI)
-            session: HTTP сессия для переиспользования (опционально)
-        """
+
         self._timestamp_provider = timestamp_provider or TimestampAPI()
         self._base_url = "https://api2.kit-invest.ru/APIService.svc"
         self._session = session
         self._own_session = session is None
         self._backoff = GlobalBackoff(timeout=backoff_timeout)
 
-        # Учётные данные изначально не заданы
         self._login: str | None = None
         self._password: str | None = None
         self._company_id: int | None = None
 
-        # Если учётные данные переданы при инициализации, устанавливаем их
         if login and password and company_id:
             self.login(login, password, company_id)
 
@@ -88,17 +76,6 @@ class KitVendingAPIClient:
             to_date: datetime,
             vending_machine_id: int = None,
     ) -> SalesCollection:
-        """
-        Получить продажи по торговому автомату за период
-        
-        Args:
-            vending_machine_id: ID торгового автомата
-            from_date: Начальная дата
-            to_date: Конечная дата
-            
-        Returns:
-            SalesCollection: Коллекция продаж
-        """
         url = f"{self._base_url}/GetSales"
         to_dt_api_format = LibDateTime.datetime_to_str_kit(to_date)
         from_dt_api_format = LibDateTime.datetime_to_str_kit(from_date)
@@ -119,19 +96,12 @@ class KitVendingAPIClient:
                 **filter_data
             }
 
-
         response = await self._async_send_post_request(url, build_data)
         sales_collection = SalesCollection.model_validate(response)
 
         return sales_collection
 
     async def get_products(self) -> ProductsKitCollection:
-        """
-        Получить список товаров
-        
-        Returns:
-            ProductsKitCollection: Коллекция товаров
-        """
         url = f"{self._base_url}/GetGoods"
 
         async def build_data() -> dict[str, Any]:
@@ -144,7 +114,6 @@ class KitVendingAPIClient:
         return products_collection
 
     async def get_recipes(self) -> RecipesKitCollection:
-        """Получить список рецептов напитков."""
         url = f"{self._base_url}/GetFormulations"
 
         async def build_data() -> dict[str, Any]:
@@ -157,12 +126,6 @@ class KitVendingAPIClient:
         return models
 
     async def get_product_matrices(self) -> MatricesKitCollection:
-        """
-        Получить матрицы товаров
-        
-        Returns:
-            MatricesKitCollection: Коллекция матриц
-        """
         url = f"{self._base_url}/GetGoodsMatrices"
 
         async def build_data() -> dict[str, Any]:
@@ -175,12 +138,6 @@ class KitVendingAPIClient:
         return matrix_collection
 
     async def get_vending_machines(self) -> VendingMachinesCollection:
-        """
-        Получить список торговых автоматов
-        
-        Returns:
-            VendingMachinesCollection: Коллекция торговых автоматов
-        """
         url = f"{self._base_url}/GetVendingMachines"
 
         async def build_data() -> dict[str, Any]:
@@ -192,8 +149,30 @@ class KitVendingAPIClient:
 
         return collection
 
+    async def create_matrix(self, positions: list[dict[str, Any]], matrix_name: str) -> int:
+        url = f"{self._base_url}/CreatePiecesMatrix"
+
+        async def build_data() -> dict[str, Any]:
+            request_id = await self._timestamp_provider.async_get_now()
+
+            return {
+                "Auth": self._build_auth(request_id),
+                "MatrixName": matrix_name,
+                "Positions": [
+                    {
+                        'LineNumber': position['line_number'],
+                        'ChoiceNumber': position['line_number'],
+                        'GoodsName': position['product_name'],
+                        'Price2': position['price'],
+                        'Price': position['price'],
+                    } for position in positions
+                ]
+            }
+
+        response = await self._async_send_post_request(url, build_data)
+        return int(response["Id"])
+
     def login(self, login: str, password: str, company_id: int) -> None:
-        """Установить учётные данные для авторизации"""
         if not login:
             raise KitAPIValidationError("login не может быть пустым")
         if not password:
@@ -206,17 +185,14 @@ class KitVendingAPIClient:
         self._company_id = company_id
 
     def logout(self) -> None:
-        """Удалить учётные данные"""
         self._login = None
         self._password = None
         self._company_id = None
 
     def is_authenticated(self) -> bool:
-        """Проверить, установлены ли учётные данные"""
         return self._login is not None and self._password is not None and self._company_id is not None
 
     def _build_auth(self, request_id: int) -> dict[str, Any]:
-        """Построить объект авторизации"""
         if not self.is_authenticated():
             raise KitAPIAuthError(
                 "Учётные данные не установлены. Используйте метод login() для установки учётных данных.")
@@ -232,7 +208,6 @@ class KitVendingAPIClient:
         }
 
     async def _get_session(self) -> aiohttp.ClientSession:
-        """Получить HTTP сессию, создав её при необходимости"""
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession()
             self._own_session = True
@@ -243,14 +218,7 @@ class KitVendingAPIClient:
             url: str,
             build_data: Callable[[], Awaitable[Mapping]]
     ) -> Mapping:
-        """
-        Отправить асинхронный POST запрос с поддержкой retry при TOO_MANY_REQUEST.
-        
-        Args:
-            url: URL для запроса
-            build_data: Асинхронная функция для построения данных запроса.
-                        Вызывается заново при каждой попытке для обновления request_id.
-        """
+
         max_retries = 2
 
         for attempt in range(max_retries):
@@ -304,19 +272,15 @@ class KitVendingAPIClient:
             except Exception as e:
                 raise KitAPIError(f"Неожиданная ошибка при выполнении запроса: {e}") from e
 
-        # Этот код не должен выполняться, но для полноты
         raise KitAPIError("Неожиданное завершение цикла retry")
 
     async def close(self):
-        """Закрыть HTTP сессию, если она была создана клиентом"""
         if self._session and not self._session.closed and self._own_session:
             await self._session.close()
             self._session = None
 
     async def __aenter__(self):
-        """Асинхронный контекстный менеджер: вход"""
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Асинхронный контекстный менеджер: выход (закрытие сессии)"""
         await self.close()
