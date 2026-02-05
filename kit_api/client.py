@@ -3,13 +3,13 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from enum import IntEnum
 from typing import Mapping, Any, Callable, Awaitable
 
 import aiohttp
 from aiohttp import ClientError as AioHTTPClientError, ContentTypeError
 from dotenv import load_dotenv
 
+from kit_api.enums import VendingMachineCommand, ResultCodes
 from kit_api.models import RecipesKitCollection
 from kit_api.exceptions import (
     KitAPIError,
@@ -27,12 +27,6 @@ from kit_api.models import (
 from kit_api.timestamp_api import TimestampAPI
 from kit_api.project_time import LibDateTime
 from kit_api.rate_limiter import rate_limit, GlobalBackoff
-
-
-class ResultCodes(IntEnum):
-    SUCCESS = 0
-    TOO_MANY_REQUEST = 27
-
 
 load_dotenv()
 
@@ -181,6 +175,48 @@ class KitVendingAPIClient:
         response = await self._async_send_post_request(url, build_data)
         return int(response["Id"])
 
+    async def bound_matrix_to_vending_machine(
+            self,
+            matrix_id: int,
+            machine_id: int,
+            account: KitAPIAccount | None = None
+    ):
+        url = f"{self._base_url}/ApplyMatrix"
+
+        async def build_data() -> dict[str, Any]:
+            request_id = await self._timestamp_provider.async_get_now()
+
+            return {
+                "Auth": self._build_auth(request_id, account),
+                "MatrixId": matrix_id,
+                "VendingMachineId": machine_id
+            }
+
+        response = self._async_send_post_request(url, build_data)
+        return response
+
+    async def send_command_to_vending_machine(
+            self,
+            machine_id: int,
+            command: VendingMachineCommand,
+            account: KitAPIAccount | None = None
+    ):
+        url = f"{self._base_url}/SendCommand"
+
+        async def build_data() -> dict[str, Any]:
+            request_id = await self._timestamp_provider.async_get_now()
+
+            return {
+                "Auth": self._build_auth(request_id, account),
+                "Command": {
+                    "CommandCode": command,
+                    "VendingMachineId": machine_id,
+                }
+            }
+
+        response = self._async_send_post_request(url, build_data)
+        return response
+
     def is_authenticated(self) -> bool:
         return self._login is not None and self._password is not None and self._company_id is not None
 
@@ -189,7 +225,6 @@ class KitVendingAPIClient:
             raise KitAPIAuthError(
                 "Учётные данные не установлены. Передайте данные в констуктор клиента "
                 "или в аргументах метода в виде аккаунта.")
-
 
         if account is not None:
             login = account.login
@@ -200,7 +235,6 @@ class KitVendingAPIClient:
             login = self._login
             password = self._password
             company_id = self._company_id
-
 
         sign = hashlib.md5(
             f"{company_id}{password}{request_id}".encode("utf-8")
