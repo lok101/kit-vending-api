@@ -192,7 +192,7 @@ class KitVendingAPIClient:
                 "VendingMachineId": machine_id
             }
 
-        response = self._async_send_post_request(url, build_data)
+        response = await self._async_send_post_request(url, build_data)
         return response
 
     async def send_command_to_vending_machine(
@@ -214,7 +214,7 @@ class KitVendingAPIClient:
                 }
             }
 
-        response = self._async_send_post_request(url, build_data)
+        response = await self._async_send_post_request(url, build_data)
         return response
 
     def is_authenticated(self) -> bool:
