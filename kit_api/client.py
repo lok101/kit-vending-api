@@ -9,7 +9,7 @@ import aiohttp
 from aiohttp import ClientError as AioHTTPClientError, ContentTypeError
 from dotenv import load_dotenv
 
-from kit_api.enums import VendingMachineCommand, ResulCode
+from kit_api.enums import VendingMachineCommand, ResultCode
 from kit_api.models import RecipesKitCollection
 from kit_api.exceptions import (
     KitAPIError,
@@ -180,7 +180,7 @@ class KitVendingAPIClient:
             matrix_id: int,
             machine_id: int,
             account: KitAPIAccount | None = None
-    ) -> ResulCode:
+    ) -> ResultCode:
         url = f"{self._base_url}/ApplyMatrix"
 
         async def build_data() -> dict[str, Any]:
@@ -194,14 +194,14 @@ class KitVendingAPIClient:
 
         response = await self._async_send_post_request(url, build_data)
 
-        return ResulCode(response["ResultCode"])
+        return ResultCode(response["ResultCode"])
 
     async def send_command_to_vending_machine(
             self,
             machine_id: int,
             command: VendingMachineCommand,
             account: KitAPIAccount | None = None
-    ) -> ResulCode:
+    ) -> ResultCode:
         url = f"{self._base_url}/SendCommand"
 
         async def build_data() -> dict[str, Any]:
@@ -216,7 +216,7 @@ class KitVendingAPIClient:
             }
 
         response = await self._async_send_post_request(url, build_data)
-        return ResulCode(response["ResultCode"])
+        return ResultCode(response["ResultCode"])
 
     def is_authenticated(self) -> bool:
         return self._login is not None and self._password is not None and self._company_id is not None
@@ -287,7 +287,7 @@ class KitVendingAPIClient:
                             result_code=-1
                         )
 
-                    if result_code == ResulCode.TOO_MANY_REQUEST:
+                    if result_code == ResultCode.TOO_MANY_REQUEST:
                         if attempt < max_retries - 1:
                             await self._backoff.trigger_backoff()
                             continue
@@ -296,7 +296,7 @@ class KitVendingAPIClient:
                             result_code=result_code
                         )
 
-                    if result_code != ResulCode.SUCCESS:
+                    if result_code != ResultCode.SUCCESS:
                         message = response_data.get("ErrorMessage", "Неизвестная ошибка")
                         raise KitAPIResponseError(
                             f'Не удалось получить данные от Kit API, код ответа - {result_code}, текст ошибки: {message}',

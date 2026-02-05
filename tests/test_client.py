@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from aiohttp import ClientResponse, ClientSession
 from aiohttp.client_exceptions import ClientError
 
-from kit_api.client import KitVendingAPIClient, ResulCode
+from kit_api.client import KitVendingAPIClient, ResultCode
 from kit_api.exceptions import (
     KitAPIValidationError,
     KitAPIResponseError,
@@ -261,7 +261,7 @@ class TestAsyncSendPostRequest:
         )
 
         error_response = {
-            "ResultCode": ResulCode.TOO_MANY_REQUEST,
+            "ResultCode": ResultCode.TOO_MANY_REQUEST,
             "ErrorMessage": "Too many requests"
         }
 
@@ -276,7 +276,7 @@ class TestAsyncSendPostRequest:
         with pytest.raises(KitAPIResponseError) as exc_info:
             await client._async_send_post_request("http://test.com", {"test": "data"})
 
-        assert exc_info.value.result_code == ResulCode.TOO_MANY_REQUEST
+        assert exc_info.value.result_code == ResultCode.TOO_MANY_REQUEST
         await client.close()
 
     @pytest.mark.asyncio

@@ -5,6 +5,7 @@ Kit Vending API Client Package
 """
 
 from kit_api.client import KitVendingAPIClient
+from kit_api.enums import ResultCode, VendingMachineCommand
 from kit_api.exceptions import (
     KitAPIError,
     KitAPIAuthError,
@@ -29,6 +30,10 @@ from kit_api.models import (
 __version__ = "0.1.0"
 
 __all__ = [
+    # enums
+    "ResultCode",
+    "VendingMachineCommand",
+
     # Client
     "KitVendingAPIClient",
     # Exceptions
@@ -51,4 +56,3 @@ __all__ = [
     "RecipeKitModel",
     "SaleModel",
 ]
-

@@ -1,7 +1,7 @@
 from enum import IntEnum
 
 
-class ResulCode(IntEnum):
+class ResultCode(IntEnum):
     SUCCESS = 0
     TOO_MANY_REQUEST = 27
 
