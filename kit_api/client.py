@@ -58,9 +58,7 @@ class KitVendingAPIClient:
 
     def __init__(
             self,
-            login: str | None = None,
-            password: str | None = None,
-            company_id: int | None = None,
+            account: KitAPIAccount | None = None,
             timestamp_provider: TimestampAPI | None = None,
             session: aiohttp.ClientSession | None = None
     ):
@@ -71,9 +69,9 @@ class KitVendingAPIClient:
         self._own_session = session is None
         self._backoff = GlobalBackoff(timeout=backoff_timeout)
 
-        self._login: str | None = login
-        self._password: str | None = password
-        self._company_id: int | None = company_id
+        self._login: str | None = account.login
+        self._password: str | None = account.password
+        self._company_id: int | None = account.company_id
 
     async def get_sales(
             self,
