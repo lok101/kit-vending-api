@@ -24,6 +24,7 @@ from kit_api.models import (
     SalesCollection,
     VendingMachinesCollection,
 )
+from kit_api.models.vending_machine_state import VendingMachinesStatesCollection
 from kit_api.timestamp_api import TimestampAPI
 from kit_api.project_time import LibDateTime
 from kit_api.rate_limiter import rate_limit, GlobalBackoff
@@ -144,6 +145,18 @@ class KitVendingAPIClient:
 
         response = await self._async_send_post_request(url, build_data)
         collection = VendingMachinesCollection.model_validate(response)
+
+        return collection
+
+    async def get_vending_machine_states(self, account: KitAPIAccount | None = None) -> VendingMachinesStatesCollection:
+        url = f"{self._base_url}/GetVMStates"
+
+        async def build_data() -> dict[str, Any]:
+            request_id = await self._timestamp_provider.async_get_now()
+            return {"Auth": self._build_auth(request_id, account)}
+
+        response = await self._async_send_post_request(url, build_data)
+        collection = VendingMachinesStatesCollection.model_validate(response)
 
         return collection
 

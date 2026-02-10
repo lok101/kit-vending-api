@@ -9,3 +9,7 @@ class ResultCode(IntEnum):
 class VendingMachineCommand(IntEnum):
     LOAD_MATRIX = 3
     APPLY_MATRIX = 4
+
+class VendingMachineStatus(IntEnum):
+    MATRIX_LOADED = 21
+    NO_CONNECTION = 1

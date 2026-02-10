@@ -1,7 +1,3 @@
-"""
-Модели торговых автоматов Kit API
-"""
-
 from typing import Annotated, Any
 
 from pydantic import BaseModel, Field, model_validator, BeforeValidator
@@ -10,14 +6,7 @@ from kit_api.utils import extract_vending_machine_id, extract_status
 
 
 class VendingMachineModel(BaseModel):
-    """
-    Модель торгового автомата из Kit API
-    В имени закодированы номер аппарата и статус активности.
 
-    [ X ] - Аппарат не активен
-    [num] - номер аппарата
-
-    """
     id: Annotated[int, Field(validation_alias="VendingMachineId")]
     name: Annotated[str, Field(validation_alias="VendingMachineName")]
     matrix_id: Annotated[int | None, Field(validation_alias="GoodsMatrix")]
@@ -35,7 +24,6 @@ class NotActiveVendingMachineModel(VendingMachineModel):
 
 
 class VendingMachinesCollection(BaseModel):
-    """Коллекция торговых автоматов из Kit API"""
     items: Annotated[
         list[ActiveVendingMachineModel | NotActiveVendingMachineModel],
         Field(validation_alias="VendingMachines")
