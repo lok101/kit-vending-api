@@ -9,7 +9,7 @@ import aiohttp
 from aiohttp import ClientError as AioHTTPClientError, ContentTypeError
 from dotenv import load_dotenv
 
-from kit_api.enums import VendingMachineCommand, ResultCode
+from kit_api.enums import VendingMachineCommand, ResultCode, VendingMachineStatus
 from kit_api.models import RecipesKitCollection
 from kit_api.exceptions import (
     KitAPIError,
@@ -24,7 +24,7 @@ from kit_api.models import (
     SalesCollection,
     VendingMachinesCollection,
 )
-from kit_api.models.vending_machine_state import VendingMachinesStatesCollection
+from kit_api.models.vending_machine_state import VendingMachinesStatesCollection, VendingMachineStateModel
 from kit_api.timestamp_api import TimestampAPI
 from kit_api.project_time import LibDateTime
 from kit_api.rate_limiter import rate_limit, GlobalBackoff
@@ -160,6 +160,19 @@ class KitVendingAPIClient:
 
         return collection
 
+    async def get_vending_machine_statuses(self, machine_id: int) -> list[VendingMachineStatus]:
+        res: list[VendingMachineStatus] = []
+
+        statuses_collection: VendingMachinesStatesCollection = await self.get_vending_machine_states()
+        states_map: dict[int, VendingMachineStateModel] = statuses_collection.as_map()
+
+        state_model: VendingMachineStateModel | None = states_map.get(machine_id)
+
+        if state_model is not None:
+            res: list[VendingMachineStatus] = state_model.statuses.copy()
+
+        return res
+
     async def create_matrix(
             self,
             positions: list[dict[str, Any]],
@@ -193,7 +206,7 @@ class KitVendingAPIClient:
             matrix_id: int,
             machine_id: int,
             account: KitAPIAccount | None = None
-    ) -> ResultCode:
+    ) -> None | KitAPIError:
         url = f"{self._base_url}/ApplyMatrix"
 
         async def build_data() -> dict[str, Any]:
@@ -205,16 +218,14 @@ class KitVendingAPIClient:
                 "VendingMachineId": machine_id
             }
 
-        response = await self._async_send_post_request(url, build_data)
-
-        return ResultCode(response["ResultCode"])
+        await self._async_send_post_request(url, build_data)
 
     async def send_command_to_vending_machine(
             self,
             machine_id: int,
             command: VendingMachineCommand,
             account: KitAPIAccount | None = None
-    ) -> ResultCode:
+    ) -> None | KitAPIError:
         url = f"{self._base_url}/SendCommand"
 
         async def build_data() -> dict[str, Any]:
@@ -228,8 +239,7 @@ class KitVendingAPIClient:
                 }
             }
 
-        response = await self._async_send_post_request(url, build_data)
-        return ResultCode(response["ResultCode"])
+        await self._async_send_post_request(url, build_data)
 
     def is_authenticated(self) -> bool:
         return self._login is not None and self._password is not None and self._company_id is not None
@@ -286,14 +296,16 @@ class KitVendingAPIClient:
 
                     try:
                         response_data = await response.json()
-                    except (ContentTypeError, json.JSONDecodeError) as e:
+
+                    except (ContentTypeError, json.JSONDecodeError) as attempt_ex:
                         raise KitAPIResponseError(
-                            f"Не удалось разобрать JSON ответ от API: {e}",
+                            f"Не удалось разобрать JSON ответ от API: {attempt_ex}",
                             result_code=-1
                         )
 
                     try:
                         result_code = response_data['ResultCode']
+
                     except KeyError:
                         raise KitAPIResponseError(
                             "Ответ API не содержит поле ResultCode",
@@ -304,6 +316,7 @@ class KitVendingAPIClient:
                         if attempt < max_retries - 1:
                             await self._backoff.trigger_backoff()
                             continue
+
                         raise KitAPIResponseError(
                             f"Превышен лимит запросов к API после {max_retries} попыток",
                             result_code=result_code
@@ -311,6 +324,7 @@ class KitVendingAPIClient:
 
                     if result_code != ResultCode.SUCCESS:
                         message = response_data.get("ErrorMessage", "Неизвестная ошибка")
+
                         raise KitAPIResponseError(
                             f'Не удалось получить данные от Kit API, код ответа - {result_code}, текст ошибки: {message}',
                             result_code=result_code
@@ -318,12 +332,14 @@ class KitVendingAPIClient:
 
                     return response_data
 
-            except AioHTTPClientError as e:
-                raise KitAPINetworkError(f"Ошибка сети: {e}") from e
+            except AioHTTPClientError as request_ex:
+                raise KitAPINetworkError(f"Ошибка сети: {request_ex}") from request_ex
+
             except KitAPIResponseError:
                 raise
-            except Exception as e:
-                raise KitAPIError(f"Неожиданная ошибка при выполнении запроса: {e}") from e
+
+            except Exception as request_ex:
+                raise KitAPIError(f"Неожиданная ошибка при выполнении запроса: {request_ex}") from request_ex
 
         raise KitAPIError("Неожиданное завершение цикла retry")
 

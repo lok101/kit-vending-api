@@ -20,3 +20,6 @@ class VendingMachinesStatesCollection(BaseModel):
 
     def get_all(self) -> list[VendingMachineStateModel]:
         return self.items.copy()
+
+    def as_map(self) -> dict[int, VendingMachineStateModel]:
+        return {item.id: item for item in self.items}
