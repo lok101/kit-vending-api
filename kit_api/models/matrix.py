@@ -1,11 +1,7 @@
-"""
-Модели матриц товаров Kit API
-"""
-
 from typing import Literal, Union, Annotated
 from pydantic import BaseModel, Field, Tag
 
-from kit_api.models.cells import GoodsCell, BaseMatrixCell, RecipeCell
+from kit_api.models.matrix_cell import GoodsCell, BaseMatrixCell, RecipeCell
 
 
 class MatrixKitModel(BaseModel):
@@ -42,11 +38,9 @@ class MatricesKitCollection(BaseModel):
     items: Annotated[list[MatrixType], Field(validation_alias="GoodsMatrices")]
 
     def get_snack_matrices(self) -> list[GoodsMatrixKitModel]:
-        """Получить только матрицы товаров (тип 1)"""
         return [item for item in self.items if isinstance(item, GoodsMatrixKitModel)]
 
     def get_recipes_matrices(self) -> list[RecipeMatrixKitModel]:
-        """Получить только матрицы товаров (тип 2)"""
         return [item for item in self.items if isinstance(item, RecipeMatrixKitModel)]
 
     def get_all_matrices(self) -> list[MatrixKitModel]:

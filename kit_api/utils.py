@@ -22,14 +22,6 @@ def extract_statuses(statuses_str: str) -> list[VendingMachineStatus]:
     return res
 
 
-# def extract_vending_machine_id(vending_machine_name: str) -> int | None:
-#     pattern = r'\[(\d+)\]'
-#     match = re.search(pattern, vending_machine_name)
-#     if match:
-#         return int(match.group(1))
-#     return None
-
-
 def extract_product_id(product_name: str) -> int | None:
     pattern = r'(\d+) |]'
     match = re.search(pattern, product_name)
@@ -46,3 +38,10 @@ def extract_status(vending_machine_name: str) -> bool:
     if match:
         return False
     return True
+
+# def extract_vending_machine_id(vending_machine_name: str) -> int | None:
+#     pattern = r'\[(\d+)\]'
+#     match = re.search(pattern, vending_machine_name)
+#     if match:
+#         return int(match.group(1))
+#     return None

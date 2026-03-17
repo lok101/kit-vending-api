@@ -13,13 +13,3 @@ class VendingMachineStateModel(BaseModel):
         Field(validation_alias="Statuses"),
         BeforeValidator(extract_statuses)
     ]
-
-
-class VendingMachinesStatesCollection(BaseModel):
-    items: Annotated[list[VendingMachineStateModel], Field(validation_alias="VendingMachines")]
-
-    def get_all(self) -> list[VendingMachineStateModel]:
-        return self.items.copy()
-
-    def as_map(self) -> dict[int, VendingMachineStateModel]:
-        return {item.id: item for item in self.items}

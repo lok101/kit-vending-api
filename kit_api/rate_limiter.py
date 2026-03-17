@@ -1,7 +1,3 @@
-"""
-Ограничитель запросов (rate limiter) для API
-"""
-
 import asyncio
 import inspect
 import time

@@ -1,7 +1,3 @@
-"""
-Утилиты для работы с датой и временем в форматах Kit API
-"""
-
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -27,4 +23,3 @@ class LibDateTime:
     def datetime_from_str_kit(cls, val: str) -> datetime:
         dt = datetime.strptime(val, cls._KIT_API_DATETIME_FORMAT)
         return dt.replace(tzinfo=cls._project_timezone)
-

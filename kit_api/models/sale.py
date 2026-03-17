@@ -25,10 +25,3 @@ class SaleModel(BaseModel):
         Field(validation_alias="MatrixId"),
         BeforeValidator(lambda val: int(val) if val else None)
     ]
-
-
-class SalesCollection(BaseModel):
-    items: Annotated[list[SaleModel], Field(validation_alias="Sales")]
-
-    def get_all(self) -> list[SaleModel]:
-        return self.items.copy()

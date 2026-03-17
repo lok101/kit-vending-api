@@ -1,9 +1,4 @@
-"""
-Модели данных для Kit API
-"""
-
-from kit_api.models.common import ProductModel
-from kit_api.models.matrices import (
+from kit_api.models.matrix import (
     MatricesKitCollection,
     GoodsMatrixKitModel,
     RecipeMatrixKitModel,
@@ -12,25 +7,12 @@ from kit_api.models.matrices import (
     GoodsCell,
     RecipeCell,
 )
-from kit_api.models.products import (
-    ProductsKitCollection,
-    ProductKitModel,
-)
-from kit_api.models.recipes import (
-    RecipesKitCollection,
-    RecipeKitModel,
-)
-from kit_api.models.sales import (
-    SalesCollection,
-    SaleModel
-)
-from kit_api.models.vending_machines import (
-    VendingMachineModel,
-)
+from kit_api.models.product import ProductModel
+from kit_api.models.recipe import RecipeModel
+from kit_api.models.sale import SaleModel
+from kit_api.models.vending_machine import VendingMachineModel
 
 __all__ = [
-    # Common
-    "ProductModel",
     # Matrices
     "MatricesKitCollection",
     "GoodsMatrixKitModel",
@@ -40,13 +22,10 @@ __all__ = [
     "GoodsCell",
     "RecipeCell",
     # Products
-    "ProductsKitCollection",
-    "ProductKitModel",
+    "ProductModel",
     # Recipes
-    "RecipesKitCollection",
-    "RecipeKitModel",
+    "RecipeModel",
     # Sales
-    "SalesCollection",
     "SaleModel",
     # Vending Machines
     "VendingMachineModel",

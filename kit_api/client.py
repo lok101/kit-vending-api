@@ -9,8 +9,9 @@ import aiohttp
 from aiohttp import ClientError as AioHTTPClientError, ContentTypeError
 from dotenv import load_dotenv
 
-from kit_api.enums import VendingMachineCommand, ResultCode, VendingMachineStatus
-from kit_api.models import RecipesKitCollection, VendingMachineModel
+from kit_api import SaleModel, ProductModel, RecipeModel
+from kit_api.enums import VendingMachineCommand, ResultCode
+from kit_api.models import VendingMachineModel
 from kit_api.exceptions import (
     KitAPIError,
     KitAPIAuthError,
@@ -18,12 +19,8 @@ from kit_api.exceptions import (
     KitAPIResponseError,
     KitAPIValidationError,
 )
-from kit_api.models import (
-    MatricesKitCollection,
-    ProductsKitCollection,
-    SalesCollection,
-)
-from kit_api.models.vending_machine_state import VendingMachinesStatesCollection, VendingMachineStateModel
+from kit_api.models import MatricesKitCollection
+from kit_api.models.vending_machine_state import VendingMachineStateModel
 from kit_api.timestamp_api import TimestampAPI
 from kit_api.project_time import LibDateTime
 from kit_api.rate_limiter import rate_limit, GlobalBackoff
@@ -63,6 +60,10 @@ class KitVendingAPIClient:
         self._own_session = session is None
         self._backoff = GlobalBackoff(timeout=backoff_timeout)
 
+        self._login: str | None = None
+        self._password: str | None = None
+        self._company_id: int | None = None
+
         if account:
             self._login: str | None = account.login
             self._password: str | None = account.password
@@ -74,7 +75,7 @@ class KitVendingAPIClient:
             to_date: datetime,
             vending_machine_id: int = None,
             account: KitAPIAccount | None = None,
-    ) -> SalesCollection:
+    ) -> list[SaleModel]:
         url = f"{self._base_url}/GetSales"
         to_dt_api_format = LibDateTime.datetime_to_str_kit(to_date)
         from_dt_api_format = LibDateTime.datetime_to_str_kit(from_date)
@@ -96,11 +97,10 @@ class KitVendingAPIClient:
             }
 
         response = await self._async_send_post_request(url, build_data)
-        sales_collection = SalesCollection.model_validate(response)
 
-        return sales_collection
+        return [SaleModel.model_validate(item) for item in response["Sales"]]
 
-    async def get_products(self, account: KitAPIAccount | None = None) -> ProductsKitCollection:
+    async def get_products(self, account: KitAPIAccount | None = None) -> list[ProductModel]:
         url = f"{self._base_url}/GetGoods"
 
         async def build_data() -> dict[str, Any]:
@@ -108,11 +108,10 @@ class KitVendingAPIClient:
             return {"Auth": self._build_auth(request_id, account)}
 
         response = await self._async_send_post_request(url, build_data)
-        products_collection = ProductsKitCollection.model_validate(response)
 
-        return products_collection
+        return [ProductModel.model_validate(item) for item in response["Goods"]]
 
-    async def get_recipes(self, account: KitAPIAccount | None = None) -> RecipesKitCollection:
+    async def get_recipes(self, account: KitAPIAccount | None = None) -> list[RecipeModel]:
         url = f"{self._base_url}/GetFormulations"
 
         async def build_data() -> dict[str, Any]:
@@ -120,9 +119,8 @@ class KitVendingAPIClient:
             return {"Auth": self._build_auth(request_id, account)}
 
         response = await self._async_send_post_request(url, build_data)
-        models = RecipesKitCollection.model_validate(response)
 
-        return models
+        return [RecipeModel.model_validate(item) for item in response["Formulations"]]
 
     async def get_product_matrices(self, account: KitAPIAccount | None = None) -> MatricesKitCollection:
         url = f"{self._base_url}/GetGoodsMatrices"
@@ -144,11 +142,10 @@ class KitVendingAPIClient:
             return {"Auth": self._build_auth(request_id, account)}
 
         response = await self._async_send_post_request(url, build_data)
-        vending_machines = [VendingMachineModel.model_validate(item) for item in response['VendingMachines']]
 
-        return vending_machines
+        return [VendingMachineModel.model_validate(item) for item in response['VendingMachines']]
 
-    async def get_vending_machine_states(self, account: KitAPIAccount | None = None) -> VendingMachinesStatesCollection:
+    async def get_vending_machine_states(self, account: KitAPIAccount | None = None) -> list[VendingMachineStateModel]:
         url = f"{self._base_url}/GetVMStates"
 
         async def build_data() -> dict[str, Any]:
@@ -156,22 +153,21 @@ class KitVendingAPIClient:
             return {"Auth": self._build_auth(request_id, account)}
 
         response = await self._async_send_post_request(url, build_data)
-        collection = VendingMachinesStatesCollection.model_validate(response)
 
-        return collection
+        return [VendingMachineStateModel.model_validate(item) for item in response['VendingMachines']]
 
-    async def get_vending_machine_statuses(self, machine_id: int) -> list[VendingMachineStatus]:
-        res: list[VendingMachineStatus] = []
-
-        statuses_collection: VendingMachinesStatesCollection = await self.get_vending_machine_states()
-        states_map: dict[int, VendingMachineStateModel] = statuses_collection.as_map()
-
-        state_model: VendingMachineStateModel | None = states_map.get(machine_id)
-
-        if state_model is not None:
-            res: list[VendingMachineStatus] = state_model.statuses.copy()
-
-        return res
+    # async def get_vending_machine_statuses(self, machine_id: int) -> list[VendingMachineStatus]:
+    #     res: list[VendingMachineStatus] = []
+    #
+    #     statuses_collection: VendingMachinesStatesCollection = await self.get_vending_machine_states()
+    #     states_map: dict[int, VendingMachineStateModel] = statuses_collection.as_map()
+    #
+    #     state_model: VendingMachineStateModel | None = states_map.get(machine_id)
+    #
+    #     if state_model is not None:
+    #         res: list[VendingMachineStatus] = state_model.statuses.copy()
+    #
+    #     return res
 
     async def create_matrix(
             self,

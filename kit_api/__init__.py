@@ -1,9 +1,3 @@
-"""
-Kit Vending API Client Package
-
-Пакет для работы с API Kit Vending (api2.kit-invest.ru)
-"""
-
 from kit_api.client import KitVendingAPIClient
 from kit_api.enums import ResultCode, VendingMachineCommand
 from kit_api.exceptions import (
@@ -15,15 +9,12 @@ from kit_api.exceptions import (
 )
 from kit_api.models import (
     MatricesKitCollection,
-    ProductsKitCollection,
-    SalesCollection,
-    RecipesKitCollection,
-    ProductKitModel,
+    ProductModel,
     VendingMachineModel,
     GoodsMatrixKitModel,
     RecipeMatrixKitModel,
     ComboMatrixKitModel,
-    RecipeKitModel, SaleModel
+    RecipeModel, SaleModel
 )
 
 __version__ = "0.1.0"
@@ -43,14 +34,11 @@ __all__ = [
     "KitAPIValidationError",
     # Models
     "MatricesKitCollection",
-    "ProductsKitCollection",
-    "SalesCollection",
-    "RecipesKitCollection",
-    "ProductKitModel",
+    "ProductModel",
     "VendingMachineModel",
     "GoodsMatrixKitModel",
     "RecipeMatrixKitModel",
     "ComboMatrixKitModel",
-    "RecipeKitModel",
+    "RecipeModel",
     "SaleModel",
 ]
