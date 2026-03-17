@@ -25,7 +25,6 @@ from kit_api.models.sales import (
     SaleModel
 )
 from kit_api.models.vending_machines import (
-    VendingMachinesCollection,
     VendingMachineModel,
 )
 
@@ -50,6 +49,5 @@ __all__ = [
     "SalesCollection",
     "SaleModel",
     # Vending Machines
-    "VendingMachinesCollection",
     "VendingMachineModel",
 ]

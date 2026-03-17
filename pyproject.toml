@@ -24,6 +24,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pydantic>=2.12.5",
     "tzdata>=2025.3",
+    "beartype>=0.22.9",
 ]
 
 [project.optional-dependencies]

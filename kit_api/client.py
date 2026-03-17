@@ -10,7 +10,7 @@ from aiohttp import ClientError as AioHTTPClientError, ContentTypeError
 from dotenv import load_dotenv
 
 from kit_api.enums import VendingMachineCommand, ResultCode, VendingMachineStatus
-from kit_api.models import RecipesKitCollection
+from kit_api.models import RecipesKitCollection, VendingMachineModel
 from kit_api.exceptions import (
     KitAPIError,
     KitAPIAuthError,
@@ -22,7 +22,6 @@ from kit_api.models import (
     MatricesKitCollection,
     ProductsKitCollection,
     SalesCollection,
-    VendingMachinesCollection,
 )
 from kit_api.models.vending_machine_state import VendingMachinesStatesCollection, VendingMachineStateModel
 from kit_api.timestamp_api import TimestampAPI
@@ -64,9 +63,10 @@ class KitVendingAPIClient:
         self._own_session = session is None
         self._backoff = GlobalBackoff(timeout=backoff_timeout)
 
-        self._login: str | None = account.login
-        self._password: str | None = account.password
-        self._company_id: int | None = account.company_id
+        if account:
+            self._login: str | None = account.login
+            self._password: str | None = account.password
+            self._company_id: int | None = account.company_id
 
     async def get_sales(
             self,
@@ -136,7 +136,7 @@ class KitVendingAPIClient:
 
         return matrix_collection
 
-    async def get_vending_machines(self, account: KitAPIAccount | None = None) -> VendingMachinesCollection:
+    async def get_vending_machines(self, account: KitAPIAccount | None = None) -> list[VendingMachineModel]:
         url = f"{self._base_url}/GetVendingMachines"
 
         async def build_data() -> dict[str, Any]:
@@ -144,9 +144,9 @@ class KitVendingAPIClient:
             return {"Auth": self._build_auth(request_id, account)}
 
         response = await self._async_send_post_request(url, build_data)
-        collection = VendingMachinesCollection.model_validate(response)
+        vending_machines = [VendingMachineModel.model_validate(item) for item in response['VendingMachines']]
 
-        return collection
+        return vending_machines
 
     async def get_vending_machine_states(self, account: KitAPIAccount | None = None) -> VendingMachinesStatesCollection:
         url = f"{self._base_url}/GetVMStates"
