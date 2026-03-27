@@ -11,9 +11,9 @@ from kit_api.models import (
     MatricesKitCollection,
     ProductModel,
     VendingMachineModel,
-    GoodsMatrixKitModel,
-    RecipeMatrixKitModel,
-    ComboMatrixKitModel,
+    GoodsMatrixModel,
+    RecipeMatrixModel,
+    ComboMatrixModel,
     RecipeModel, SaleModel
 )
 
@@ -36,9 +36,9 @@ __all__ = [
     "MatricesKitCollection",
     "ProductModel",
     "VendingMachineModel",
-    "GoodsMatrixKitModel",
-    "RecipeMatrixKitModel",
-    "ComboMatrixKitModel",
+    "GoodsMatrixModel",
+    "RecipeMatrixModel",
+    "ComboMatrixModel",
     "RecipeModel",
     "SaleModel",
 ]

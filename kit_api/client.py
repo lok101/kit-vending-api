@@ -9,7 +9,7 @@ import aiohttp
 from aiohttp import ClientError as AioHTTPClientError, ContentTypeError
 from dotenv import load_dotenv
 
-from kit_api import SaleModel, ProductModel, RecipeModel
+from kit_api.models import SaleModel, ProductModel, RecipeModel
 from kit_api.enums import VendingMachineCommand, ResultCode
 from kit_api.models import VendingMachineModel
 from kit_api.exceptions import (
