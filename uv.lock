@@ -407,7 +407,7 @@ wheels = [
 
 [[package]]
 name = "kit-api"
-version = "0.2.6"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },

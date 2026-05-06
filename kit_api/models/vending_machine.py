@@ -17,9 +17,9 @@ class VendingMachineModel(BaseModel):
 
     @computed_field
     @property
-    def code(self) -> int | None:
+    def code(self) -> str | None:
         m = _VM_CODE_RE.search(self.name)
-        return int(m.group(1)) if m else None
+        return m.group(1) if m else None
 
     @computed_field
     @property
