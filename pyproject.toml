@@ -1,6 +1,6 @@
 [project]
 name = "kit-api"
-version = "0.2.6"
+version = "0.4.0"
 description = "Клиент для работы с Kit Vending API (api2.kit-invest.ru)"
 readme = "README.md"
 requires-python = ">=3.10"
