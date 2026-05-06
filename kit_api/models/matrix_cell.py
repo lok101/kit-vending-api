@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class BaseMatrixCell(BaseModel):
@@ -27,3 +27,10 @@ class GoodsCell(BaseMatrixCell):
 
 class RecipeCell(BaseMatrixCell):
     recipe_id: Annotated[int, Field(validation_alias="FormulationId")]
+
+
+class RecipeCodeCell(BaseMatrixCell):
+    model_config = ConfigDict(populate_by_name=True)
+
+    recipe_id: int
+    recipe_code: str | None

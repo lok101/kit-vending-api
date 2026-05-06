@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from aiohttp import ClientResponse, ClientSession
 from aiohttp.client_exceptions import ClientError
 
-from kit_api.client import KitVendingAPIClient, ResultCode
+from kit_api.client import KitVendingAPIClient, KitAPIAccount, ResultCode
 from kit_api.exceptions import (
     KitAPIValidationError,
     KitAPIResponseError,
@@ -32,6 +32,22 @@ def create_mock_session_with_post(mock_response, post_side_effect=None):
         mock_session.post = MagicMock(return_value=mock_context_manager)
     mock_session.closed = False
     return mock_session
+
+
+def make_post_async_cm(mock_response):
+    """Один вызов session.post() — контекстный менеджер с данным mock_response."""
+    mock_context_manager = MagicMock()
+    mock_context_manager.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_context_manager.__aexit__ = AsyncMock(return_value=None)
+    return mock_context_manager
+
+
+def mock_json_response(json_data):
+    mock_response = MagicMock(spec=ClientResponse)
+    mock_response.status = 200
+    mock_response.json = AsyncMock(return_value=json_data)
+    mock_response.raise_for_status = MagicMock()
+    return mock_response
 
 
 class TestKitVendingAPIClientInit:
@@ -536,6 +552,106 @@ class TestAPIMethods:
         result = await client.get_vending_machines()
 
         assert result is not None
+        await client.close()
+
+
+class TestRecipeMatricesWithCodes:
+    """Тесты get_recipe_matrices_with_codes"""
+
+    @pytest.mark.asyncio
+    async def test_without_auth_raises_error(self, mock_timestamp_provider):
+        """Запрос без учётных данных вызывает ошибку"""
+        client = KitVendingAPIClient(timestamp_provider=mock_timestamp_provider)
+
+        with pytest.raises(KitAPIAuthError, match="Учётные данные не установлены"):
+            await client.get_recipe_matrices_with_codes()
+
+    @pytest.mark.asyncio
+    async def test_resolves_recipe_code_from_formulations(self, mock_timestamp_provider):
+        """Рецептурная матрица обогащается recipe_code по FormulationId"""
+        account = KitAPIAccount(login="u", password="p", company_id=1)
+        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
+
+        formulations_json = {
+            "ResultCode": 0,
+            "Formulations": [
+                {"FormulationId": 100, "FormulationName": "42|Recipe Title"},
+            ],
+        }
+        matrices_json = {
+            "ResultCode": 0,
+            "GoodsMatrices": [
+                {
+                    "MatrixId": 7,
+                    "MatrixName": "Matrix R",
+                    "MatrixType": 2,
+                    "Details": [
+                        {"LineNumber": 3, "Price2": 99.5, "FormulationId": 100},
+                    ],
+                }
+            ],
+        }
+
+        mock_session = create_mock_session_with_post(
+            None,
+            post_side_effect=[
+                make_post_async_cm(mock_json_response(formulations_json)),
+                make_post_async_cm(mock_json_response(matrices_json)),
+            ],
+        )
+        client._session = mock_session
+
+        result = await client.get_recipe_matrices_with_codes()
+
+        assert len(result) == 1
+        assert result[0].id == 7
+        assert result[0].name == "Matrix R"
+        assert result[0].type == 2
+        assert len(result[0].cells) == 1
+        cell = result[0].cells[0]
+        assert cell.line_number == 3
+        assert cell.price == 99.5
+        assert cell.recipe_id == 100
+        assert cell.recipe_code == "42"
+
+        assert mock_session.post.call_count == 2
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_missing_formulation_yields_none_code(self, mock_timestamp_provider):
+        """Если формуляции нет в списке — recipe_code None, recipe_id сохраняется"""
+        account = KitAPIAccount(login="u", password="p", company_id=1)
+        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
+
+        formulations_json = {"ResultCode": 0, "Formulations": []}
+        matrices_json = {
+            "ResultCode": 0,
+            "GoodsMatrices": [
+                {
+                    "MatrixId": 1,
+                    "MatrixName": "M",
+                    "MatrixType": 2,
+                    "Details": [
+                        {"LineNumber": 1, "Price2": 10.0, "FormulationId": 999},
+                    ],
+                }
+            ],
+        }
+
+        mock_session = create_mock_session_with_post(
+            None,
+            post_side_effect=[
+                make_post_async_cm(mock_json_response(formulations_json)),
+                make_post_async_cm(mock_json_response(matrices_json)),
+            ],
+        )
+        client._session = mock_session
+
+        result = await client.get_recipe_matrices_with_codes()
+
+        assert len(result) == 1
+        assert result[0].cells[0].recipe_id == 999
+        assert result[0].cells[0].recipe_code is None
         await client.close()
 
 

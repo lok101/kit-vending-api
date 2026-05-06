@@ -19,7 +19,7 @@ from kit_api.exceptions import (
     KitAPIResponseError,
     KitAPIValidationError,
 )
-from kit_api.models import MatricesKitCollection
+from kit_api.models import MatricesKitCollection, RecipeCodeMatrixModel, RecipeCodeCell
 from kit_api.models.vending_machine_state import VendingMachineStateModel
 from kit_api.timestamp_api import TimestampAPI
 from kit_api.project_time import LibDateTime
@@ -133,6 +133,32 @@ class KitVendingAPIClient:
         matrix_collection = MatricesKitCollection.model_validate(response)
 
         return matrix_collection
+
+    async def get_recipe_matrices_with_codes(
+        self, account: KitAPIAccount | None = None
+    ) -> list[RecipeCodeMatrixModel]:
+        recipes = await self.get_recipes(account)
+        by_id = {r.id: r for r in recipes}
+        collection = await self.get_product_matrices(account)
+
+        result: list[RecipeCodeMatrixModel] = []
+        for m in collection.get_recipes_matrices():
+            cells: list[RecipeCodeCell] = []
+            for c in m.cells:
+                recipe = by_id.get(c.recipe_id)
+                recipe_code = recipe.code if recipe else None
+                cells.append(
+                    RecipeCodeCell(
+                        line_number=c.line_number,
+                        price=c.price,
+                        recipe_id=c.recipe_id,
+                        recipe_code=recipe_code,
+                    )
+                )
+            result.append(
+                RecipeCodeMatrixModel(id=m.id, name=m.name, cells=cells)
+            )
+        return result
 
     async def get_vending_machines(self, account: KitAPIAccount | None = None) -> list[VendingMachineModel]:
         url = f"{self._base_url}/GetVendingMachines"

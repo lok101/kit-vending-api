@@ -1,7 +1,7 @@
 from typing import Literal, Union, Annotated
 from pydantic import BaseModel, Field, Tag
 
-from kit_api.models.matrix_cell import GoodsCell, BaseMatrixCell, RecipeCell
+from kit_api.models.matrix_cell import GoodsCell, BaseMatrixCell, RecipeCell, RecipeCodeCell
 
 
 class MatrixModel(BaseModel):
@@ -18,6 +18,13 @@ class GoodsMatrixModel(MatrixModel):
 class RecipeMatrixModel(MatrixModel):
     type: Literal[2] = Field(validation_alias="MatrixType")
     cells: Annotated[list[RecipeCell], Field(validation_alias="Details")]
+
+
+class RecipeCodeMatrixModel(BaseModel):
+    id: int
+    name: str
+    type: Literal[2] = 2
+    cells: list[RecipeCodeCell]
 
 
 class ComboMatrixModel(MatrixModel):

@@ -2,6 +2,12 @@
 Общие фикстуры для тестов
 """
 
+import os
+
+# До импорта kit_api: иначе kit_api.client зафиксирует rate_limit (1 req / 10s) и тесты зависают.
+os.environ.setdefault("KIT_API_REQUEST_PER_WINDOW", "100")
+os.environ.setdefault("KIT_API_WINDOW_SECONDS", "1")
+
 import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock
