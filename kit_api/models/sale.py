@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, BeforeValidator
+from pydantic import BaseModel, Field, BeforeValidator, computed_field
 
 from kit_api.project_time import LibDateTime
+from kit_api.utils import extract_product_code
 
 
 class SaleModel(BaseModel):
@@ -25,3 +26,8 @@ class SaleModel(BaseModel):
         Field(validation_alias="MatrixId"),
         BeforeValidator(lambda val: int(val) if val else None)
     ]
+
+    @computed_field
+    @property
+    def product_code(self) -> str | None:
+        return extract_product_code(self.product_name)

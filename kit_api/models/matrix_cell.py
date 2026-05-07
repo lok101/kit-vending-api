@@ -2,6 +2,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from kit_api.utils import extract_product_code
+
 
 class BaseMatrixCell(BaseModel):
     line_number: Annotated[int, Field(validation_alias="LineNumber")]
@@ -15,14 +17,7 @@ class GoodsCell(BaseMatrixCell):
     @computed_field
     @property
     def product_code(self) -> str | None:
-        if "|" not in self.product_name:
-            return None
-        left, _ = self.product_name.split("|", 1)
-        left_stripped = left.strip()
-        if left_stripped.isdigit():
-            return left_stripped
-        return None
-
+        return extract_product_code(self.product_name)
 
 
 class RecipeCell(BaseMatrixCell):

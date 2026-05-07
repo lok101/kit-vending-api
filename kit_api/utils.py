@@ -22,26 +22,14 @@ def extract_statuses(statuses_str: str) -> list[VendingMachineStatus]:
     return res
 
 
-def extract_product_id(product_name: str) -> int | None:
-    pattern = r'(\d+) |]'
-    match = re.search(pattern, product_name)
-    if match:
-        return int(match.group(1))
+def extract_product_code(product_name: str):
+    if "|" not in product_name:
+        return None
+
+    left, _ = product_name.split("|", 1)
+    left_stripped = left.strip()
+
+    if left_stripped.isdigit():
+        return left_stripped
+
     return None
-
-
-def extract_status(vending_machine_name: str) -> bool:
-    if "тест" in vending_machine_name.lower():
-        return False
-    pattern = r'^\[ X \]'
-    match = re.match(pattern, vending_machine_name, re.IGNORECASE)
-    if match:
-        return False
-    return True
-
-# def extract_vending_machine_id(vending_machine_name: str) -> int | None:
-#     pattern = r'\[(\d+)\]'
-#     match = re.search(pattern, vending_machine_name)
-#     if match:
-#         return int(match.group(1))
-#     return None
