@@ -6,6 +6,9 @@ from kit_api.exceptions import (
     KitAPINetworkError,
     KitAPIResponseError,
     KitAPIValidationError,
+    SaleProductCodeResolveCriticalError,
+    SaleProductCodeResolveError,
+    SaleProductCodeResolveNonCriticalError,
 )
 from kit_api.models import (
     MatricesKitCollection,
@@ -36,6 +39,9 @@ __all__ = [
     "KitAPINetworkError",
     "KitAPIResponseError",
     "KitAPIValidationError",
+    "SaleProductCodeResolveCriticalError",
+    "SaleProductCodeResolveError",
+    "SaleProductCodeResolveNonCriticalError",
     # Models
     "MatricesKitCollection",
     "ProductModel",

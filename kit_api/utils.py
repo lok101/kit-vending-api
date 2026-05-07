@@ -3,12 +3,18 @@ import re
 from kit_api.enums import VendingMachineStatus
 
 _PRODUCT_NAME_PLACEHOLDER = re.compile(r"Товар\s+\d+")
+_PRODUCT_ZERO_PLACEHOLDER = re.compile(r"Товар\s+0")
 _VM_CODE_RE = re.compile(r"\[(\d{3})\]")
 
 
 def is_product_name_placeholder(name: str) -> bool:
     """Имя вида «Товар <номер>», когда товар в продаже не удалось определить по названию."""
     return bool(_PRODUCT_NAME_PLACEHOLDER.fullmatch(name.strip()))
+
+
+def is_product_zero_placeholder(name: str) -> bool:
+    """Плейсхолдер «Товар 0» — недопустимая позиция, отдельно от остальных «Товар N»."""
+    return bool(_PRODUCT_ZERO_PLACEHOLDER.fullmatch(name.strip()))
 
 
 def extract_statuses(statuses_str: str) -> list[VendingMachineStatus]:

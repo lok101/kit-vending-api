@@ -475,7 +475,7 @@ class TestGetSalesResolved:
                     "DateTime": "01.01.2024 12:00:00",
                     "GoodsName": "Товар 3",
                     "VendingMachine": 1,
-                    "VendingMachineName": "VM",
+                    "VendingMachineName": "VM [001]",
                     "MatrixId": 100,
                 }
             ],
@@ -534,7 +534,7 @@ class TestGetSalesResolved:
                     "DateTime": "01.01.2024 12:00:00",
                     "GoodsName": "Товар 3",
                     "VendingMachine": 2,
-                    "VendingMachineName": "VM",
+                    "VendingMachineName": "VM [001]",
                     "MatrixId": 7,
                 }
             ],
@@ -577,7 +577,9 @@ class TestGetSalesResolved:
         await client.close()
 
     @pytest.mark.asyncio
-    async def test_non_placeholder_does_not_fetch_matrices(self, mock_timestamp_provider):
+    async def test_non_placeholder_does_not_fetch_matrices(
+        self, mock_timestamp_provider, caplog
+    ):
         """Без плейсхолдера и без кода в названии — только GetSales, без GetGoodsMatrices."""
         account = KitAPIAccount(login="u", password="p", company_id=1)
         client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
@@ -594,7 +596,7 @@ class TestGetSalesResolved:
                     "DateTime": "01.01.2024 12:00:00",
                     "GoodsName": "Без кода в названии",
                     "VendingMachine": 1,
-                    "VendingMachineName": "VM",
+                    "VendingMachineName": "VM [001]",
                     "MatrixId": 50,
                 }
             ],
@@ -608,10 +610,55 @@ class TestGetSalesResolved:
         )
         client._session = mock_session
 
-        result = await client.get_sales_resolved(from_date, to_date)
+        with caplog.at_level(logging.DEBUG, logger="kit_api.client"):
+            result = await client.get_sales_resolved(from_date, to_date)
 
-        assert result[0].product_code is None
+        assert len(result) == 0
         assert mock_session.post.call_count == 1
+        assert "Пропуск продажи без кода товара" in caplog.text
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_product_zero_skips_debug_no_matrices(
+        self, mock_timestamp_provider, caplog
+    ):
+        """Плейсхолдер «Товар 0» — некритично, матрицы не запрашиваются."""
+        account = KitAPIAccount(login="u", password="p", company_id=1)
+        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
+
+        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+
+        sales_json = {
+            "ResultCode": 0,
+            "Sales": [
+                {
+                    "LineNumber": 1,
+                    "Sum": 10.0,
+                    "DateTime": "01.01.2024 12:00:00",
+                    "GoodsName": "Товар 0",
+                    "VendingMachine": 1,
+                    "VendingMachineName": "VM [100]",
+                    "MatrixId": 50,
+                }
+            ],
+        }
+
+        mock_session = create_mock_session_with_post(
+            None,
+            post_side_effect=[
+                make_post_async_cm(mock_json_response(sales_json)),
+            ],
+        )
+        client._session = mock_session
+
+        with caplog.at_level(logging.DEBUG, logger="kit_api.client"):
+            result = await client.get_sales_resolved(from_date, to_date)
+
+        assert result == []
+        assert mock_session.post.call_count == 1
+        assert "Товар 0" in caplog.text
+        assert "Пропуск продажи без кода товара" in caplog.text
         await client.close()
 
     @pytest.mark.asyncio
@@ -632,7 +679,7 @@ class TestGetSalesResolved:
                     "DateTime": "01.01.2024 12:00:00",
                     "GoodsName": "Товар 9",
                     "VendingMachine": 1,
-                    "VendingMachineName": "VM",
+                    "VendingMachineName": "VM [001]",
                     "MatrixId": 1,
                 }
             ],
@@ -663,7 +710,7 @@ class TestGetSalesResolved:
         with caplog.at_level(logging.WARNING, logger="kit_api.client"):
             result = await client.get_sales_resolved(from_date, to_date)
 
-        assert result[0].product_code is None
+        assert result == []
         assert "Не удалось определить код товара" in caplog.text
         assert "ячейка" in caplog.text
         await client.close()
@@ -806,7 +853,7 @@ class TestMatricesRecipesCache:
                     "DateTime": "01.01.2024 12:00:00",
                     "GoodsName": "Товар 3",
                     "VendingMachine": 1,
-                    "VendingMachineName": "VM",
+                    "VendingMachineName": "VM [001]",
                     "MatrixId": 100,
                 }
             ],
@@ -867,7 +914,7 @@ class TestMatricesRecipesCache:
                     "DateTime": "01.01.2024 12:00:00",
                     "GoodsName": "Товар 3",
                     "VendingMachine": 2,
-                    "VendingMachineName": "VM",
+                    "VendingMachineName": "VM [001]",
                     "MatrixId": 7,
                 }
             ],

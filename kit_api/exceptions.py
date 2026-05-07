@@ -22,3 +22,15 @@ class KitAPINetworkError(KitAPIError):
 
 class KitAPIValidationError(KitAPIError):
     pass
+
+
+class SaleProductCodeResolveError(KitAPIError):
+    """Не удалось определить код товара для разрешённой продажи (SaleResolvedModel)."""
+
+
+class SaleProductCodeResolveCriticalError(SaleProductCodeResolveError):
+    """Несогласованные или неполные данные каталога/матрицы — логируется как warning."""
+
+
+class SaleProductCodeResolveNonCriticalError(SaleProductCodeResolveError):
+    """Ожидаемый пропуск (переплата, «Товар 0», не плейсхолдер и т. п.) — логируется как debug."""

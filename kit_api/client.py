@@ -31,13 +31,19 @@ from kit_api.exceptions import (
     KitAPINetworkError,
     KitAPIResponseError,
     KitAPIValidationError,
+    SaleProductCodeResolveCriticalError,
+    SaleProductCodeResolveNonCriticalError,
 )
 from kit_api.models import MatricesKitCollection, RecipeCodeMatrixModel, RecipeCodeCell
 from kit_api.models.vending_machine_state import VendingMachineStateModel
 from kit_api.timestamp_api import TimestampAPI
 from kit_api.project_time import LibDateTime
 from kit_api.rate_limiter import rate_limit, GlobalBackoff
-from kit_api.utils import is_product_name_placeholder, extract_vending_machine_code
+from kit_api.utils import (
+    extract_vending_machine_code,
+    is_product_name_placeholder,
+    is_product_zero_placeholder,
+)
 
 load_dotenv()
 
@@ -165,6 +171,7 @@ class KitVendingAPIClient:
         needs_matrices = any(
             sale.product_code is None
             and is_product_name_placeholder(sale.product_name)
+            and not is_product_zero_placeholder(sale.product_name)
             and sale.matrix_id is not None
             and sale.line != -1  # Так маркируется "переплата", всегда пропускаем
             for sale in sales
@@ -182,6 +189,7 @@ class KitVendingAPIClient:
                 if sale.matrix_id is not None
                 and sale.product_code is None
                 and is_product_name_placeholder(sale.product_name)
+                and not is_product_zero_placeholder(sale.product_name)
             )
             if needs_recipes:
                 recipes = await self.get_recipes(account)
@@ -189,19 +197,31 @@ class KitVendingAPIClient:
 
         result: list[SaleResolvedModel] = []
         for sale in sales:
-            code, reason_if_missing = self._resolve_sale_product_code(
-                sale, matrices_by_id, recipes_by_id
-            )
-
-            if code is None and reason_if_missing is not None:
-                _logger.warning(
-                    "Не удалось определить код товара для продажи (%s): "
+            try:
+                code = self._resolve_sale_product_code(
+                    sale, matrices_by_id, recipes_by_id
+                )
+            except SaleProductCodeResolveNonCriticalError as exc:
+                _logger.debug(
+                    "Пропуск продажи без кода товара (%s): "
                     "vending_machine_name=%s, line=%s, matrix_id=%s, product_name=%r",
-                    reason_if_missing,
+                    exc,
                     sale.vending_machine_name,
                     sale.line,
                     sale.matrix_id,
                     sale.product_name,
+                )
+                continue
+            except SaleProductCodeResolveCriticalError as exc:
+                _logger.warning(
+                    "Не удалось определить код товара для продажи (%s): "
+                    "vending_machine_name=%s, line=%s, matrix_id=%s, product_name=%r",
+                    exc,
+                    sale.vending_machine_name,
+                    sale.line,
+                    sale.matrix_id,
+                    sale.product_name,
+                    exc_info=True,
                 )
                 continue
 
@@ -241,24 +261,37 @@ class KitVendingAPIClient:
             sale: SaleModel,
             matrices_by_id: dict[int, MatrixModel],
             recipes_by_id: dict[int, RecipeModel],
-    ) -> tuple[str | None, str | None]:
-        """Возвращает (код, причина_для_лога) если код отсутствует; причина None если логировать не нужно."""
+    ) -> str:
+        """Возвращает код товара или бросает SaleProductCodeResolve*Error."""
         direct = sale.product_code
         if direct is not None:
-            return direct, None
+            return direct
 
         if sale.line == -1:
-            return None, "'переплата'"
+            raise SaleProductCodeResolveNonCriticalError(
+                "продажа помечена как «переплата» (LineNumber=-1)"
+            )
+
+        if is_product_zero_placeholder(sale.product_name):
+            raise SaleProductCodeResolveNonCriticalError(
+                "плейсхолдер «Товар 0» — недопустимая позиция"
+            )
 
         if not is_product_name_placeholder(sale.product_name):
-            return None, "в названии нет кода (не плейсхолдер «Товар <номер>»)"
+            raise SaleProductCodeResolveCriticalError(
+                "в названии нет кода (не плейсхолдер «Товар <номер>»)"
+            )
 
         if sale.matrix_id is None:
-            return None, "плейсхолдер без MatrixId, восстановление по матрице невозможно"
+            raise SaleProductCodeResolveCriticalError(
+                "плейсхолдер без MatrixId, восстановление по матрице невозможно"
+            )
 
         matrix = matrices_by_id.get(sale.matrix_id)
         if matrix is None:
-            return None, "матрица не найдена в ответе GetGoodsMatrices"
+            raise SaleProductCodeResolveCriticalError(
+                "матрица не найдена в ответе GetGoodsMatrices"
+            )
 
         cell: GoodsCell | RecipeCell | None = None
         for c in matrix.cells:
@@ -269,31 +302,45 @@ class KitVendingAPIClient:
                 break
 
         if cell is None:
-            return None, "ячейка с указанным LineNumber не найдена или тип ячейки не поддерживается"
+            raise SaleProductCodeResolveCriticalError(
+                "ячейка с указанным LineNumber не найдена или тип ячейки не поддерживается"
+            )
 
         if isinstance(matrix, GoodsMatrixModel):
             if isinstance(cell, GoodsCell):
                 resolved = cell.product_code
                 if resolved is None:
-                    return None, "в ячейке матрицы товаров нет кода в GoodsName"
-                return resolved, None
-            return None, "ожидалась ячейка товарной матрицы (GoodsCell)"
+                    raise SaleProductCodeResolveCriticalError(
+                        "в ячейке матрицы товаров нет кода в GoodsName"
+                    )
+                return resolved
+            raise SaleProductCodeResolveCriticalError(
+                "ожидалась ячейка товарной матрицы (GoodsCell)"
+            )
 
         if isinstance(matrix, RecipeMatrixModel):
             if not isinstance(cell, RecipeCell):
-                return None, "ожидалась ячейка рецептурной матрицы (RecipeCell)"
+                raise SaleProductCodeResolveCriticalError(
+                    "ожидалась ячейка рецептурной матрицы (RecipeCell)"
+                )
             recipe = recipes_by_id.get(cell.recipe_id)
             if recipe is None:
-                return None, f"рецепт FormulationId={cell.recipe_id} не найден в GetFormulations"
+                raise SaleProductCodeResolveCriticalError(
+                    f"рецепт FormulationId={cell.recipe_id} не найден в GetFormulations"
+                )
             resolved = recipe.code
             if resolved is None:
-                return None, "в названии рецепта нет кода (FormulationName)"
-            return resolved, None
+                raise SaleProductCodeResolveCriticalError(
+                    "в названии рецепта нет кода (FormulationName)"
+                )
+            return resolved
 
         if isinstance(matrix, ComboMatrixModel):
-            return None, "матрица типа Combo (MatrixType=3): восстановление кода не поддерживается"
+            raise SaleProductCodeResolveCriticalError(
+                "матрица типа Combo (MatrixType=3): восстановление кода не поддерживается"
+            )
 
-        return None, "неизвестный тип матрицы"
+        raise SaleProductCodeResolveCriticalError("неизвестный тип матрицы")
 
     async def get_products(self, account: KitAPIAccount | None = None) -> list[ProductModel]:
         url = f"{self._base_url}/GetGoods"
