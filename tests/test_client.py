@@ -4,18 +4,18 @@
 
 import pytest
 import json
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from aiohttp import ClientResponse, ClientSession
 from aiohttp.client_exceptions import ClientError
 
-from kit_api.client import KitVendingAPIClient, KitAPIAccount, ResultCode
+from kit_api.client import KitVendingAPIClient, KitAPIAccount
+from kit_api.enums import ResultCode
 from kit_api.exceptions import (
-    KitAPIValidationError,
     KitAPIResponseError,
     KitAPINetworkError,
-    KitAPIError,
     KitAPIAuthError,
 )
 
@@ -53,13 +53,9 @@ def mock_json_response(json_data):
 class TestKitVendingAPIClientInit:
     """Тесты инициализации клиента"""
 
-    def test_init_with_credentials(self, api_credentials):
-        """Тест инициализации с переданными учетными данными"""
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"]
-        )
+    def test_init_with_credentials(self, api_account, api_credentials):
+        """Тест инициализации с переданным аккаунтом"""
+        client = KitVendingAPIClient(account=api_account)
         assert client._login == api_credentials["login"]
         assert client._password == api_credentials["password"]
         assert client._company_id == api_credentials["company_id"]
@@ -72,100 +68,28 @@ class TestKitVendingAPIClientInit:
         assert client._company_id is None
         assert not client.is_authenticated()
 
-    def test_init_with_session(self, api_credentials):
+    def test_init_with_session(self, api_account):
         """Тест инициализации с переданной сессией"""
         session = MagicMock(spec=ClientSession)
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"],
-            session=session
-        )
+        client = KitVendingAPIClient(account=api_account, session=session)
         assert client._session == session
         assert client._own_session is False
 
-    def test_init_creates_own_session(self, api_credentials):
+    def test_init_creates_own_session(self, api_account):
         """Тест что клиент создает свою сессию если не передана"""
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"]
-        )
+        client = KitVendingAPIClient(account=api_account)
         assert client._session is None
         assert client._own_session is True
-
-
-class TestAuthMethods:
-    """Тесты методов авторизации"""
-
-    def test_login(self):
-        """Тест установки учётных данных"""
-        client = KitVendingAPIClient()
-        client.login("test_login", "test_password", "test_company_id")
-        
-        assert client._login == "test_login"
-        assert client._password == "test_password"
-        assert client._company_id == "test_company_id"
-        assert client.is_authenticated()
-
-    def test_login_empty_login_raises_error(self):
-        """Тест что установка пустого login вызывает ошибку"""
-        client = KitVendingAPIClient()
-        with pytest.raises(KitAPIValidationError, match="login не может быть пустым"):
-            client.login("", "password", "company_id")
-
-    def test_login_empty_password_raises_error(self):
-        """Тест что установка пустого password вызывает ошибку"""
-        client = KitVendingAPIClient()
-        with pytest.raises(KitAPIValidationError, match="password не может быть пустым"):
-            client.login("login", "", "company_id")
-
-    def test_login_empty_company_id_raises_error(self):
-        """Тест что установка пустого company_id вызывает ошибку"""
-        client = KitVendingAPIClient()
-        with pytest.raises(KitAPIValidationError, match="company_id не может быть пустым"):
-            client.login("login", "password", "")
-
-    def test_logout(self, api_credentials):
-        """Тест удаления учётных данных"""
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"]
-        )
-        assert client.is_authenticated()
-        
-        client.logout()
-        
-        assert client._login is None
-        assert client._password is None
-        assert client._company_id is None
-        assert not client.is_authenticated()
-
-    def test_is_authenticated(self):
-        """Тест проверки статуса авторизации"""
-        client = KitVendingAPIClient()
-        assert not client.is_authenticated()
-        
-        client.login("login", "password", "company_id")
-        assert client.is_authenticated()
-        
-        client.logout()
-        assert not client.is_authenticated()
 
 
 class TestBuildAuth:
     """Тесты построения объекта авторизации"""
 
-    def test_build_auth(self, api_credentials):
+    def test_build_auth(self, api_account, api_credentials):
         """Тест построения объекта авторизации"""
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"]
-        )
+        client = KitVendingAPIClient(account=api_account)
         request_id = 1234567890
-        auth = client._build_auth(request_id)
+        auth = client._build_auth(request_id, None)
 
         assert auth["CompanyId"] == api_credentials["company_id"]
         assert auth["RequestId"] == request_id
@@ -179,36 +103,27 @@ class TestBuildAuth:
         request_id = 1234567890
         
         with pytest.raises(KitAPIAuthError, match="Учётные данные не установлены"):
-            client._build_auth(request_id)
+            client._build_auth(request_id, None)
 
 
 class TestGetSession:
     """Тесты получения HTTP сессии"""
 
     @pytest.mark.asyncio
-    async def test_get_session_creates_new(self, api_credentials):
+    async def test_get_session_creates_new(self, api_account):
         """Тест создания новой сессии если её нет"""
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"]
-        )
+        client = KitVendingAPIClient(account=api_account)
         session = await client._get_session()
         assert isinstance(session, ClientSession)
         assert client._own_session is True
         await client.close()
 
     @pytest.mark.asyncio
-    async def test_get_session_reuses_existing(self, api_credentials):
+    async def test_get_session_reuses_existing(self, api_account):
         """Тест переиспользования существующей сессии"""
         session = MagicMock(spec=ClientSession)
         session.closed = False
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"],
-            session=session
-        )
+        client = KitVendingAPIClient(account=api_account, session=session)
         result = await client._get_session()
         assert result == session
 
@@ -217,13 +132,9 @@ class TestAsyncSendPostRequest:
     """Тесты отправки POST запросов"""
 
     @pytest.mark.asyncio
-    async def test_successful_request(self, api_credentials, sample_api_response):
+    async def test_successful_request(self, api_account, sample_api_response):
         """Тест успешного запроса"""
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"]
-        )
+        client = KitVendingAPIClient(account=api_account)
 
         mock_response = MagicMock(spec=ClientResponse)
         mock_response.status = 200
@@ -233,20 +144,19 @@ class TestAsyncSendPostRequest:
         mock_session = create_mock_session_with_post(mock_response)
         client._session = mock_session
 
-        result = await client._async_send_post_request("http://test.com", {"test": "data"})
+        async def build_data():
+            return {"test": "data"}
+
+        result = await client._async_send_post_request("http://test.com", build_data)
 
         assert result == sample_api_response
         mock_session.post.assert_called_once()
         await client.close()
 
     @pytest.mark.asyncio
-    async def test_request_with_error_code(self, api_credentials):
+    async def test_request_with_error_code(self, api_account):
         """Тест запроса с кодом ошибки"""
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"]
-        )
+        client = KitVendingAPIClient(account=api_account)
 
         error_response = {
             "ResultCode": 1,
@@ -261,20 +171,19 @@ class TestAsyncSendPostRequest:
         mock_session = create_mock_session_with_post(mock_response)
         client._session = mock_session
 
+        async def build_data():
+            return {"test": "data"}
+
         with pytest.raises(KitAPIResponseError) as exc_info:
-            await client._async_send_post_request("http://test.com", {"test": "data"})
+            await client._async_send_post_request("http://test.com", build_data)
 
         assert exc_info.value.result_code == 1
         await client.close()
 
     @pytest.mark.asyncio
-    async def test_request_too_many_requests(self, api_credentials):
+    async def test_request_too_many_requests(self, api_account):
         """Тест обработки ошибки превышения лимита запросов"""
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"]
-        )
+        client = KitVendingAPIClient(account=api_account)
 
         error_response = {
             "ResultCode": ResultCode.TOO_MANY_REQUEST,
@@ -289,20 +198,19 @@ class TestAsyncSendPostRequest:
         mock_session = create_mock_session_with_post(mock_response)
         client._session = mock_session
 
+        async def build_data():
+            return {"test": "data"}
+
         with pytest.raises(KitAPIResponseError) as exc_info:
-            await client._async_send_post_request("http://test.com", {"test": "data"})
+            await client._async_send_post_request("http://test.com", build_data)
 
         assert exc_info.value.result_code == ResultCode.TOO_MANY_REQUEST
         await client.close()
 
     @pytest.mark.asyncio
-    async def test_request_invalid_json(self, api_credentials):
+    async def test_request_invalid_json(self, api_account):
         """Тест обработки невалидного JSON"""
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"]
-        )
+        client = KitVendingAPIClient(account=api_account)
 
         mock_response = MagicMock(spec=ClientResponse)
         mock_response.status = 200
@@ -312,20 +220,19 @@ class TestAsyncSendPostRequest:
         mock_session = create_mock_session_with_post(mock_response)
         client._session = mock_session
 
+        async def build_data():
+            return {"test": "data"}
+
         with pytest.raises(KitAPIResponseError) as exc_info:
-            await client._async_send_post_request("http://test.com", {"test": "data"})
+            await client._async_send_post_request("http://test.com", build_data)
 
         assert exc_info.value.result_code == -1
         await client.close()
 
     @pytest.mark.asyncio
-    async def test_request_missing_result_code(self, api_credentials):
+    async def test_request_missing_result_code(self, api_account):
         """Тест обработки ответа без ResultCode"""
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"]
-        )
+        client = KitVendingAPIClient(account=api_account)
 
         invalid_response = {"Data": []}
 
@@ -337,20 +244,19 @@ class TestAsyncSendPostRequest:
         mock_session = create_mock_session_with_post(mock_response)
         client._session = mock_session
 
+        async def build_data():
+            return {"test": "data"}
+
         with pytest.raises(KitAPIResponseError) as exc_info:
-            await client._async_send_post_request("http://test.com", {"test": "data"})
+            await client._async_send_post_request("http://test.com", build_data)
 
         assert exc_info.value.result_code == -1
         await client.close()
 
     @pytest.mark.asyncio
-    async def test_request_network_error(self, api_credentials):
+    async def test_request_network_error(self, api_account):
         """Тест обработки сетевой ошибки"""
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"]
-        )
+        client = KitVendingAPIClient(account=api_account)
 
         # Исключение должно выбрасываться при вызове post(), а не при входе в контекстный менеджер
         mock_session = create_mock_session_with_post(
@@ -359,8 +265,11 @@ class TestAsyncSendPostRequest:
         )
         client._session = mock_session
 
+        async def build_data():
+            return {"test": "data"}
+
         with pytest.raises(KitAPINetworkError):
-            await client._async_send_post_request("http://test.com", {"test": "data"})
+            await client._async_send_post_request("http://test.com", build_data)
 
         await client.close()
 
@@ -376,15 +285,13 @@ class TestAPIMethods:
         to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo('Europe/Moscow'))
         
         with pytest.raises(KitAPIAuthError, match="Учётные данные не установлены"):
-            await client.get_sales(1, from_date, to_date)
+            await client.get_sales(from_date, to_date)
 
     @pytest.mark.asyncio
-    async def test_get_sales(self, api_credentials, mock_timestamp_provider):
+    async def test_get_sales(self, api_account, mock_timestamp_provider):
         """Тест получения продаж"""
         client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"],
+            account=api_account,
             timestamp_provider=mock_timestamp_provider
         )
 
@@ -404,7 +311,7 @@ class TestAPIMethods:
         mock_session = create_mock_session_with_post(mock_response)
         client._session = mock_session
 
-        result = await client.get_sales(1, from_date, to_date)
+        result = await client.get_sales(from_date, to_date)
 
         assert result is not None
         mock_session.post.assert_called_once()
@@ -419,12 +326,10 @@ class TestAPIMethods:
             await client.get_products()
 
     @pytest.mark.asyncio
-    async def test_get_products(self, api_credentials, mock_timestamp_provider):
+    async def test_get_products(self, api_account, mock_timestamp_provider):
         """Тест получения товаров"""
         client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"],
+            account=api_account,
             timestamp_provider=mock_timestamp_provider
         )
 
@@ -455,12 +360,10 @@ class TestAPIMethods:
             await client.get_recipes()
 
     @pytest.mark.asyncio
-    async def test_get_recipes(self, api_credentials, mock_timestamp_provider):
+    async def test_get_recipes(self, api_account, mock_timestamp_provider):
         """Тест получения рецептов"""
         client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"],
+            account=api_account,
             timestamp_provider=mock_timestamp_provider
         )
 
@@ -491,12 +394,10 @@ class TestAPIMethods:
             await client.get_product_matrices()
 
     @pytest.mark.asyncio
-    async def test_get_product_matrices(self, api_credentials, mock_timestamp_provider):
+    async def test_get_product_matrices(self, api_account, mock_timestamp_provider):
         """Тест получения матриц товаров"""
         client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"],
+            account=api_account,
             timestamp_provider=mock_timestamp_provider
         )
 
@@ -527,12 +428,10 @@ class TestAPIMethods:
             await client.get_vending_machines()
 
     @pytest.mark.asyncio
-    async def test_get_vending_machines(self, api_credentials, mock_timestamp_provider):
+    async def test_get_vending_machines(self, api_account, mock_timestamp_provider):
         """Тест получения торговых автоматов"""
         client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"],
+            account=api_account,
             timestamp_provider=mock_timestamp_provider
         )
 
@@ -552,6 +451,221 @@ class TestAPIMethods:
         result = await client.get_vending_machines()
 
         assert result is not None
+        await client.close()
+
+
+class TestGetSalesResolved:
+    """Тесты get_sales_resolved."""
+
+    @pytest.mark.asyncio
+    async def test_resolves_code_from_goods_matrix(self, mock_timestamp_provider):
+        """Плейсхолдер «Товар N» + товарная матрица — код из GoodsName ячейки."""
+        account = KitAPIAccount(login="u", password="p", company_id=1)
+        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
+
+        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+
+        sales_json = {
+            "ResultCode": 0,
+            "Sales": [
+                {
+                    "LineNumber": 3,
+                    "Sum": 55.5,
+                    "DateTime": "01.01.2024 12:00:00",
+                    "GoodsName": "Товар 3",
+                    "VendingMachine": 1,
+                    "VendingMachineName": "VM",
+                    "MatrixId": 100,
+                }
+            ],
+        }
+        matrices_json = {
+            "ResultCode": 0,
+            "GoodsMatrices": [
+                {
+                    "MatrixId": 100,
+                    "MatrixName": "Snack",
+                    "MatrixType": 1,
+                    "Details": [
+                        {
+                            "LineNumber": 3,
+                            "Price2": 55.5,
+                            "GoodsName": "77|Snack bar",
+                            "MaxCount": 10,
+                        }
+                    ],
+                }
+            ],
+        }
+
+        mock_session = create_mock_session_with_post(
+            None,
+            post_side_effect=[
+                make_post_async_cm(mock_json_response(sales_json)),
+                make_post_async_cm(mock_json_response(matrices_json)),
+            ],
+        )
+        client._session = mock_session
+
+        result = await client.get_sales_resolved(from_date, to_date)
+
+        assert len(result) == 1
+        assert result[0].price == 55.5
+        assert result[0].product_code == "77"
+        assert mock_session.post.call_count == 2
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_resolves_code_from_recipe_matrix(self, mock_timestamp_provider):
+        """Плейсхолдер + рецептурная матрица — код из формуляции."""
+        account = KitAPIAccount(login="u", password="p", company_id=1)
+        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
+
+        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+
+        sales_json = {
+            "ResultCode": 0,
+            "Sales": [
+                {
+                    "LineNumber": 3,
+                    "Sum": 99.0,
+                    "DateTime": "01.01.2024 12:00:00",
+                    "GoodsName": "Товар 3",
+                    "VendingMachine": 2,
+                    "VendingMachineName": "VM",
+                    "MatrixId": 7,
+                }
+            ],
+        }
+        matrices_json = {
+            "ResultCode": 0,
+            "GoodsMatrices": [
+                {
+                    "MatrixId": 7,
+                    "MatrixName": "Matrix R",
+                    "MatrixType": 2,
+                    "Details": [
+                        {"LineNumber": 3, "Price2": 99.0, "FormulationId": 100},
+                    ],
+                }
+            ],
+        }
+        formulations_json = {
+            "ResultCode": 0,
+            "Formulations": [
+                {"FormulationId": 100, "FormulationName": "42|Recipe Title"},
+            ],
+        }
+
+        mock_session = create_mock_session_with_post(
+            None,
+            post_side_effect=[
+                make_post_async_cm(mock_json_response(sales_json)),
+                make_post_async_cm(mock_json_response(matrices_json)),
+                make_post_async_cm(mock_json_response(formulations_json)),
+            ],
+        )
+        client._session = mock_session
+
+        result = await client.get_sales_resolved(from_date, to_date)
+
+        assert len(result) == 1
+        assert result[0].product_code == "42"
+        assert mock_session.post.call_count == 3
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_non_placeholder_does_not_fetch_matrices(self, mock_timestamp_provider):
+        """Без плейсхолдера и без кода в названии — только GetSales, без GetGoodsMatrices."""
+        account = KitAPIAccount(login="u", password="p", company_id=1)
+        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
+
+        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+
+        sales_json = {
+            "ResultCode": 0,
+            "Sales": [
+                {
+                    "LineNumber": 1,
+                    "Sum": 10.0,
+                    "DateTime": "01.01.2024 12:00:00",
+                    "GoodsName": "Без кода в названии",
+                    "VendingMachine": 1,
+                    "VendingMachineName": "VM",
+                    "MatrixId": 50,
+                }
+            ],
+        }
+
+        mock_session = create_mock_session_with_post(
+            None,
+            post_side_effect=[
+                make_post_async_cm(mock_json_response(sales_json)),
+            ],
+        )
+        client._session = mock_session
+
+        result = await client.get_sales_resolved(from_date, to_date)
+
+        assert result[0].product_code is None
+        assert mock_session.post.call_count == 1
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_missing_cell_logs_warning(self, mock_timestamp_provider, caplog):
+        """Нет строки в матрице — предупреждение в логе."""
+        account = KitAPIAccount(login="u", password="p", company_id=1)
+        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
+
+        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+
+        sales_json = {
+            "ResultCode": 0,
+            "Sales": [
+                {
+                    "LineNumber": 9,
+                    "Sum": 1.0,
+                    "DateTime": "01.01.2024 12:00:00",
+                    "GoodsName": "Товар 9",
+                    "VendingMachine": 1,
+                    "VendingMachineName": "VM",
+                    "MatrixId": 1,
+                }
+            ],
+        }
+        matrices_json = {
+            "ResultCode": 0,
+            "GoodsMatrices": [
+                {
+                    "MatrixId": 1,
+                    "MatrixName": "M",
+                    "MatrixType": 1,
+                    "Details": [
+                        {"LineNumber": 1, "Price2": 1.0, "GoodsName": "1|A", "MaxCount": 1},
+                    ],
+                }
+            ],
+        }
+
+        mock_session = create_mock_session_with_post(
+            None,
+            post_side_effect=[
+                make_post_async_cm(mock_json_response(sales_json)),
+                make_post_async_cm(mock_json_response(matrices_json)),
+            ],
+        )
+        client._session = mock_session
+
+        with caplog.at_level(logging.WARNING, logger="kit_api.client"):
+            result = await client.get_sales_resolved(from_date, to_date)
+
+        assert result[0].product_code is None
+        assert "Не удалось определить код товара" in caplog.text
+        assert "ячейка" in caplog.text
         await client.close()
 
 
@@ -655,28 +769,237 @@ class TestRecipeMatricesWithCodes:
         await client.close()
 
 
+def _post_urls_from_session(mock_session) -> list[str]:
+    urls: list[str] = []
+    for call in mock_session.post.call_args_list:
+        if "url" in call.kwargs:
+            urls.append(call.kwargs["url"])
+        elif call.args:
+            urls.append(call.args[0])
+        else:
+            urls.append("")
+    return urls
+
+
+def _count_posts_containing(mock_session, substring: str) -> int:
+    return sum(1 for url in _post_urls_from_session(mock_session) if substring in url)
+
+
+class TestMatricesRecipesCache:
+    """Кэш GetGoodsMatrices / GetFormulations по (company_id, login)."""
+
+    @pytest.mark.asyncio
+    async def test_second_get_sales_resolved_reuses_cached_matrices(self, mock_timestamp_provider):
+        """Два вызова get_sales_resolved с одним аккаунтом — GetGoodsMatrices один раз."""
+        account = KitAPIAccount(login="u", password="p", company_id=1)
+        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
+
+        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+
+        sales_json = {
+            "ResultCode": 0,
+            "Sales": [
+                {
+                    "LineNumber": 3,
+                    "Sum": 55.5,
+                    "DateTime": "01.01.2024 12:00:00",
+                    "GoodsName": "Товар 3",
+                    "VendingMachine": 1,
+                    "VendingMachineName": "VM",
+                    "MatrixId": 100,
+                }
+            ],
+        }
+        matrices_json = {
+            "ResultCode": 0,
+            "GoodsMatrices": [
+                {
+                    "MatrixId": 100,
+                    "MatrixName": "Snack",
+                    "MatrixType": 1,
+                    "Details": [
+                        {
+                            "LineNumber": 3,
+                            "Price2": 55.5,
+                            "GoodsName": "77|Snack bar",
+                            "MaxCount": 10,
+                        }
+                    ],
+                }
+            ],
+        }
+
+        mock_session = create_mock_session_with_post(
+            None,
+            post_side_effect=[
+                make_post_async_cm(mock_json_response(sales_json)),
+                make_post_async_cm(mock_json_response(matrices_json)),
+                make_post_async_cm(mock_json_response(sales_json)),
+            ],
+        )
+        client._session = mock_session
+
+        r1 = await client.get_sales_resolved(from_date, to_date)
+        r2 = await client.get_sales_resolved(from_date, to_date)
+
+        assert len(r1) == 1 and r1[0].product_code == "77"
+        assert len(r2) == 1 and r2[0].product_code == "77"
+        assert mock_session.post.call_count == 3
+        assert _count_posts_containing(mock_session, "GetGoodsMatrices") == 1
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_second_get_sales_resolved_reuses_cached_formulations(self, mock_timestamp_provider):
+        """Два вызова с рецептурной матрицей — по одному запросу к GetGoodsMatrices и GetFormulations."""
+        account = KitAPIAccount(login="u", password="p", company_id=1)
+        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
+
+        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
+
+        sales_json = {
+            "ResultCode": 0,
+            "Sales": [
+                {
+                    "LineNumber": 3,
+                    "Sum": 99.0,
+                    "DateTime": "01.01.2024 12:00:00",
+                    "GoodsName": "Товар 3",
+                    "VendingMachine": 2,
+                    "VendingMachineName": "VM",
+                    "MatrixId": 7,
+                }
+            ],
+        }
+        matrices_json = {
+            "ResultCode": 0,
+            "GoodsMatrices": [
+                {
+                    "MatrixId": 7,
+                    "MatrixName": "Matrix R",
+                    "MatrixType": 2,
+                    "Details": [
+                        {"LineNumber": 3, "Price2": 99.0, "FormulationId": 100},
+                    ],
+                }
+            ],
+        }
+        formulations_json = {
+            "ResultCode": 0,
+            "Formulations": [
+                {"FormulationId": 100, "FormulationName": "42|Recipe Title"},
+            ],
+        }
+
+        mock_session = create_mock_session_with_post(
+            None,
+            post_side_effect=[
+                make_post_async_cm(mock_json_response(sales_json)),
+                make_post_async_cm(mock_json_response(matrices_json)),
+                make_post_async_cm(mock_json_response(formulations_json)),
+                make_post_async_cm(mock_json_response(sales_json)),
+            ],
+        )
+        client._session = mock_session
+
+        r1 = await client.get_sales_resolved(from_date, to_date)
+        r2 = await client.get_sales_resolved(from_date, to_date)
+
+        assert r1[0].product_code == "42" and r2[0].product_code == "42"
+        assert mock_session.post.call_count == 4
+        assert _count_posts_containing(mock_session, "GetGoodsMatrices") == 1
+        assert _count_posts_containing(mock_session, "GetFormulations") == 1
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_different_accounts_separate_matrix_cache(self, mock_timestamp_provider):
+        """Разные KitAPIAccount — отдельные запросы GetGoodsMatrices, повтор с тем же аккаунтом из кэша."""
+        acc1 = KitAPIAccount(login="user1", password="p", company_id=10)
+        acc2 = KitAPIAccount(login="user2", password="p", company_id=20)
+        client = KitVendingAPIClient(timestamp_provider=mock_timestamp_provider)
+
+        matrices_json = {
+            "ResultCode": 0,
+            "GoodsMatrices": [
+                {
+                    "MatrixId": 1,
+                    "MatrixName": "M",
+                    "MatrixType": 1,
+                    "Details": [
+                        {"LineNumber": 1, "Price2": 1.0, "GoodsName": "1|A", "MaxCount": 1},
+                    ],
+                }
+            ],
+        }
+
+        mock_session = create_mock_session_with_post(
+            None,
+            post_side_effect=[
+                make_post_async_cm(mock_json_response(matrices_json)),
+                make_post_async_cm(mock_json_response(matrices_json)),
+            ],
+        )
+        client._session = mock_session
+
+        await client.get_product_matrices(acc1)
+        await client.get_product_matrices(acc2)
+        await client.get_product_matrices(acc1)
+
+        assert _count_posts_containing(mock_session, "GetGoodsMatrices") == 2
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_clear_matrices_cache_refetches(self, mock_timestamp_provider):
+        """clear_matrices_and_recipes_cache(account) сбрасывает кэш только для этого ключа."""
+        account = KitAPIAccount(login="u", password="p", company_id=1)
+        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
+
+        matrices_json = {
+            "ResultCode": 0,
+            "GoodsMatrices": [
+                {
+                    "MatrixId": 1,
+                    "MatrixName": "M",
+                    "MatrixType": 1,
+                    "Details": [
+                        {"LineNumber": 1, "Price2": 1.0, "GoodsName": "1|A", "MaxCount": 1},
+                    ],
+                }
+            ],
+        }
+
+        mock_session = create_mock_session_with_post(
+            None,
+            post_side_effect=[
+                make_post_async_cm(mock_json_response(matrices_json)),
+                make_post_async_cm(mock_json_response(matrices_json)),
+            ],
+        )
+        client._session = mock_session
+
+        await client.get_product_matrices()
+        client.clear_matrices_and_recipes_cache(account)
+        await client.get_product_matrices()
+
+        assert _count_posts_containing(mock_session, "GetGoodsMatrices") == 2
+        await client.close()
+
+
 class TestContextManager:
     """Тесты контекстного менеджера"""
 
     @pytest.mark.asyncio
-    async def test_context_manager(self, api_credentials):
+    async def test_context_manager(self, api_account):
         """Тест использования клиента как контекстного менеджера"""
-        async with KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"]
-        ) as client:
+        async with KitVendingAPIClient(account=api_account) as client:
             assert client is not None
             # Сессия должна быть закрыта после выхода из контекста
 
     @pytest.mark.asyncio
-    async def test_close(self, api_credentials):
+    async def test_close(self, api_account):
         """Тест закрытия сессии"""
-        client = KitVendingAPIClient(
-            login=api_credentials["login"],
-            password=api_credentials["password"],
-            company_id=api_credentials["company_id"]
-        )
+        client = KitVendingAPIClient(account=api_account)
         # Создаем сессию
         await client._get_session()
         # Закрываем

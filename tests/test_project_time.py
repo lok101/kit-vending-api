@@ -1,39 +1,38 @@
 """
-Тесты для ProjectTime
+Тесты для LibDateTime (проектный часовой пояс по умолчанию — Asia/Yekaterinburg).
 """
 
-import pytest
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from kit_api.project_time import LibDateTime
 
+_TZ_EKB = ZoneInfo("Asia/Yekaterinburg")
+
 
 class TestProjectTime:
-    """Тесты ProjectTime"""
+    """Тесты LibDateTime"""
 
-    def test_datetime_to_str_kit_with_timezone(self):
-        """Тест конвертации datetime с часовым поясом в строку Kit API"""
-        dt = datetime(2024, 1, 15, 12, 30, 45, tzinfo=ZoneInfo('Europe/Moscow'))
+    def test_datetime_to_str_kit_with_timezone(self) -> None:
+        """aware datetime приводится к проектному поясу перед форматированием."""
+        dt = datetime(2024, 1, 15, 12, 30, 45, tzinfo=ZoneInfo("Europe/Moscow"))
         result = LibDateTime.datetime_to_str_kit(dt)
-        assert result == "15.01.2024 12:30:45"
+        assert result == "15.01.2024 14:30:45"
 
-    def test_datetime_to_str_kit_without_timezone(self):
-        """Тест конвертации datetime без часового пояса в строку Kit API"""
+    def test_datetime_to_str_kit_without_timezone(self) -> None:
+        """naive datetime считается временем в проектном поясе."""
         dt = datetime(2024, 1, 15, 12, 30, 45)
         result = LibDateTime.datetime_to_str_kit(dt)
-        # Должно быть преобразовано в московское время
         assert result == "15.01.2024 12:30:45"
 
-    def test_datetime_to_str_kit_different_timezone(self):
-        """Тест конвертации datetime из другого часового пояса"""
-        dt = datetime(2024, 1, 15, 9, 30, 45, tzinfo=ZoneInfo('UTC'))
+    def test_datetime_to_str_kit_different_timezone(self) -> None:
+        """Конвертация из UTC в проектный пояс."""
+        dt = datetime(2024, 1, 15, 9, 30, 45, tzinfo=ZoneInfo("UTC"))
         result = LibDateTime.datetime_to_str_kit(dt)
-        # UTC+3 (Москва) = 12:30:45
-        assert result == "15.01.2024 12:30:45"
+        assert result == "15.01.2024 14:30:45"
 
-    def test_datetime_from_str_kit(self):
-        """Тест парсинга строки Kit API в datetime"""
+    def test_datetime_from_str_kit(self) -> None:
+        """Парсинг строки Kit API — tzinfo проекта."""
         date_str = "15.01.2024 12:30:45"
         result = LibDateTime.datetime_from_str_kit(date_str)
 
@@ -44,57 +43,50 @@ class TestProjectTime:
         assert result.hour == 12
         assert result.minute == 30
         assert result.second == 45
-        assert result.tzinfo == ZoneInfo('Europe/Moscow')
+        assert result.tzinfo == _TZ_EKB
 
-    def test_datetime_from_str_kit_roundtrip(self):
-        """Тест обратного преобразования (туда-обратно)"""
-        original_dt = datetime(2024, 1, 15, 12, 30, 45, tzinfo=ZoneInfo('Europe/Moscow'))
+    def test_datetime_from_str_kit_roundtrip(self) -> None:
+        """Туда-обратно для момента в проектном поясе."""
+        original_dt = datetime(2024, 1, 15, 12, 30, 45, tzinfo=_TZ_EKB)
         str_repr = LibDateTime.datetime_to_str_kit(original_dt)
         parsed_dt = LibDateTime.datetime_from_str_kit(str_repr)
 
         assert parsed_dt == original_dt
 
-    def test_set_timezone(self):
-        """Тест установки часового пояса"""
+    def test_set_timezone(self) -> None:
+        """Смена проектного пояса через set_timezone."""
         original_tz = LibDateTime._project_timezone
 
         try:
-            LibDateTime.set_timezone('UTC')
-            assert LibDateTime._project_timezone == ZoneInfo('UTC')
+            LibDateTime.set_timezone("UTC")
+            assert LibDateTime._project_timezone == ZoneInfo("UTC")
 
             dt = datetime(2024, 1, 15, 12, 30, 45)
             result = LibDateTime.datetime_to_str_kit(dt)
-            # Должно быть в UTC
             assert result == "15.01.2024 12:30:45"
         finally:
-            # Восстанавливаем исходный часовой пояс
             LibDateTime._project_timezone = original_tz
 
-    def test_datetime_to_str_kit_edge_cases(self):
-        """Тест граничных случаев для конвертации"""
-        # Начало дня
-        dt = datetime(2024, 1, 1, 0, 0, 0, tzinfo=ZoneInfo('Europe/Moscow'))
+    def test_datetime_to_str_kit_edge_cases(self) -> None:
+        """Граничные значения в проектном поясе (naive = Екатеринбург)."""
+        dt = datetime(2024, 1, 1, 0, 0, 0)
         result = LibDateTime.datetime_to_str_kit(dt)
         assert result == "01.01.2024 00:00:00"
 
-        # Конец дня
-        dt = datetime(2024, 12, 31, 23, 59, 59, tzinfo=ZoneInfo('Europe/Moscow'))
+        dt = datetime(2024, 12, 31, 23, 59, 59)
         result = LibDateTime.datetime_to_str_kit(dt)
         assert result == "31.12.2024 23:59:59"
 
-    def test_datetime_from_str_kit_edge_cases(self):
-        """Тест граничных случаев для парсинга"""
-        # Начало дня
+    def test_datetime_from_str_kit_edge_cases(self) -> None:
+        """Граничные значения при разборе строки."""
         date_str = "01.01.2024 00:00:00"
         result = LibDateTime.datetime_from_str_kit(date_str)
         assert result.hour == 0
         assert result.minute == 0
         assert result.second == 0
 
-        # Конец дня
         date_str = "31.12.2024 23:59:59"
         result = LibDateTime.datetime_from_str_kit(date_str)
         assert result.hour == 23
         assert result.minute == 59
         assert result.second == 59
-

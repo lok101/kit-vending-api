@@ -11,7 +11,7 @@ from kit_api.models.matrix import (
 )
 from kit_api.models.product import ProductModel
 from kit_api.models.recipe import RecipeModel
-from kit_api.models.sale import SaleModel
+from kit_api.models.sale import SaleModel, SaleResolvedModel
 from kit_api.models.vending_machine import VendingMachineModel
 
 __all__ = [
@@ -31,6 +31,7 @@ __all__ = [
     "RecipeModel",
     # Sales
     "SaleModel",
+    "SaleResolvedModel",
     # Vending Machines
     "VendingMachineModel",
 ]

@@ -6,7 +6,6 @@ import pytest
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from aiohttp import ClientResponse, ClientError as AioHTTPClientError
-from requests.exceptions import RequestException
 
 from kit_api.timestamp_api import TimestampAPI
 from kit_api.exceptions import KitAPINetworkError, KitAPIError
@@ -111,56 +110,4 @@ class TestAsyncGetNow:
 
             with pytest.raises(KitAPINetworkError, match="Ошибка сети"):
                 await api.async_get_now()
-
-
-class TestGetNow:
-    """Тесты синхронного метода get_now"""
-
-    def test_get_now_success(self):
-        """Тест успешного получения timestamp"""
-        api = TimestampAPI(base_url="https://example.com/api/timestamp")
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json = MagicMock(return_value={"timestamp": 1234567890})
-        mock_response.raise_for_status = MagicMock()
-
-        with patch("requests.get", return_value=mock_response):
-            result = api.get_now()
-
-            assert result == 1234567890
-
-    def test_get_now_invalid_json(self):
-        """Тест обработки невалидного JSON"""
-        api = TimestampAPI(base_url="https://example.com/api/timestamp")
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json = MagicMock(side_effect=json.JSONDecodeError("Invalid JSON", "", 0))
-        mock_response.raise_for_status = MagicMock()
-
-        with patch("requests.get", return_value=mock_response):
-            with pytest.raises(KitAPIError, match="Не удалось разобрать JSON"):
-                api.get_now()
-
-    def test_get_now_missing_timestamp(self):
-        """Тест обработки ответа без поля timestamp"""
-        api = TimestampAPI(base_url="https://example.com/api/timestamp")
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json = MagicMock(return_value={"data": "some data"})
-        mock_response.raise_for_status = MagicMock()
-
-        with patch("requests.get", return_value=mock_response):
-            with pytest.raises(KitAPIError, match="не содержит поле 'timestamp'"):
-                api.get_now()
-
-    def test_get_now_network_error(self):
-        """Тест обработки сетевой ошибки"""
-        api = TimestampAPI(base_url="https://example.com/api/timestamp")
-
-        with patch("requests.get", side_effect=RequestException("Network error")):
-            with pytest.raises(KitAPINetworkError, match="Ошибка сети"):
-                api.get_now()
 

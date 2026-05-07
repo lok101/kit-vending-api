@@ -7,6 +7,7 @@ import os
 # До импорта kit_api: иначе kit_api.client зафиксирует rate_limit (1 req / 10s) и тесты зависают.
 os.environ.setdefault("KIT_API_REQUEST_PER_WINDOW", "100")
 os.environ.setdefault("KIT_API_WINDOW_SECONDS", "1")
+os.environ.setdefault("KIT_API_BACKOFF_SECONDS", "0.01")
 
 import pytest
 import pytest_asyncio
@@ -14,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from kit_api.client import KitAPIAccount
 from kit_api.timestamp_api import TimestampAPI
 
 
@@ -47,6 +49,12 @@ def api_credentials():
     return {
         "login": "test_login",
         "password": "test_password",
-        "company_id": "test_company_id"
+        "company_id": 4242,
     }
+
+
+@pytest.fixture
+def api_account(api_credentials):
+    """Аккаунт Kit API для клиента."""
+    return KitAPIAccount(**api_credentials)
 

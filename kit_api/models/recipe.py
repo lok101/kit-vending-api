@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from pydantic import BaseModel, Field, BeforeValidator, computed_field
+from pydantic import BaseModel, Field, computed_field
 
 from kit_api.utils import extract_product_code
 

@@ -2,6 +2,13 @@ import re
 
 from kit_api.enums import VendingMachineStatus
 
+_PRODUCT_NAME_PLACEHOLDER = re.compile(r"Товар\s+\d+")
+
+
+def is_product_name_placeholder(name: str) -> bool:
+    """Имя вида «Товар <номер>», когда товар в продаже не удалось определить по названию."""
+    return bool(_PRODUCT_NAME_PLACEHOLDER.fullmatch(name.strip()))
+
 
 def extract_statuses(statuses_str: str) -> list[VendingMachineStatus]:
     res: list[VendingMachineStatus] = []

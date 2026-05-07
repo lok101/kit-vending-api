@@ -31,3 +31,11 @@ class SaleModel(BaseModel):
     @property
     def product_code(self) -> str | None:
         return extract_product_code(self.product_name)
+
+
+class SaleResolvedModel(BaseModel):
+    """Продажа с разрешённым кодом товара (без полного набора полей SaleModel)."""
+
+    price: float
+    timestamp: datetime
+    product_code: str | None

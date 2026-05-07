@@ -1,15 +1,28 @@
+import asyncio
 import hashlib
 import json
+import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Mapping, Any, Callable, Awaitable
+from typing import Mapping, Any, Callable, Awaitable, TypeAlias
 
 import aiohttp
 from aiohttp import ClientError as AioHTTPClientError, ContentTypeError
 from dotenv import load_dotenv
 
-from kit_api.models import SaleModel, ProductModel, RecipeModel
+from kit_api.models import (
+    ComboMatrixModel,
+    GoodsCell,
+    GoodsMatrixModel,
+    MatrixModel,
+    ProductModel,
+    RecipeCell,
+    RecipeMatrixModel,
+    RecipeModel,
+    SaleModel,
+    SaleResolvedModel,
+)
 from kit_api.enums import VendingMachineCommand, ResultCode
 from kit_api.models import VendingMachineModel
 from kit_api.exceptions import (
@@ -24,8 +37,11 @@ from kit_api.models.vending_machine_state import VendingMachineStateModel
 from kit_api.timestamp_api import TimestampAPI
 from kit_api.project_time import LibDateTime
 from kit_api.rate_limiter import rate_limit, GlobalBackoff
+from kit_api.utils import is_product_name_placeholder
 
 load_dotenv()
+
+_logger = logging.getLogger(__name__)
 
 try:
     max_requests = int(os.getenv("KIT_API_REQUEST_PER_WINDOW", 1))
@@ -42,6 +58,9 @@ class KitAPIAccount:
     login: str
     password: str
     company_id: int
+
+
+CacheKey: TypeAlias = tuple[int, str]
 
 
 @rate_limit(max_requests, time_window)
@@ -68,6 +87,40 @@ class KitVendingAPIClient:
             self._login: str | None = account.login
             self._password: str | None = account.password
             self._company_id: int | None = account.company_id
+
+        self._matrices_cache: dict[CacheKey, MatricesKitCollection] = {}
+        self._recipes_cache: dict[CacheKey, list[RecipeModel]] = {}
+        self._matrices_key_locks: dict[CacheKey, asyncio.Lock] = {}
+        self._recipes_key_locks: dict[CacheKey, asyncio.Lock] = {}
+        self._catalog_lock_registry_guard = asyncio.Lock()
+
+    def _account_cache_key(self, account: KitAPIAccount | None) -> CacheKey:
+        """Ключ кэша каталога: (company_id, login) для эффективного аккаунта."""
+        if account is not None:
+            return account.company_id, account.login
+
+        if not self.is_authenticated():
+            raise KitAPIAuthError(
+                "Учётные данные не установлены. Передайте данные в конструктор клиента "
+                "или в аргументах метода в виде аккаунта.")
+        assert self._company_id is not None and self._login is not None
+        return self._company_id, self._login
+
+    async def _get_matrices_key_lock(self, key: CacheKey) -> asyncio.Lock:
+        async with self._catalog_lock_registry_guard:
+            lock = self._matrices_key_locks.get(key)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._matrices_key_locks[key] = lock
+            return lock
+
+    async def _get_recipes_key_lock(self, key: CacheKey) -> asyncio.Lock:
+        async with self._catalog_lock_registry_guard:
+            lock = self._recipes_key_locks.get(key)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._recipes_key_locks[key] = lock
+            return lock
 
     async def get_sales(
             self,
@@ -100,6 +153,123 @@ class KitVendingAPIClient:
 
         return [SaleModel.model_validate(item) for item in response["Sales"]]
 
+    async def get_sales_resolved(
+            self,
+            from_date: datetime,
+            to_date: datetime,
+            vending_machine_id: int | None = None,
+            account: KitAPIAccount | None = None,
+    ) -> list[SaleResolvedModel]:
+        sales = await self.get_sales(from_date, to_date, vending_machine_id, account)
+
+        needs_matrices = any(
+            sale.product_code is None
+            and is_product_name_placeholder(sale.product_name)
+            and sale.matrix_id is not None
+            and sale.line != -1 # Так маркируется "переплата", всегда пропускаем
+            for sale in sales
+        )
+
+        matrices_by_id: dict[int, MatrixModel] = {}
+        recipes_by_id: dict[int, RecipeModel] = {}
+
+        if needs_matrices:
+            collection = await self.get_product_matrices(account)
+            matrices_by_id = {m.id: m for m in collection.get_all_matrices()}
+            needs_recipes = any(
+                isinstance(matrices_by_id.get(sale.matrix_id), RecipeMatrixModel)
+                for sale in sales
+                if sale.matrix_id is not None
+                and sale.product_code is None
+                and is_product_name_placeholder(sale.product_name)
+            )
+            if needs_recipes:
+                recipes = await self.get_recipes(account)
+                recipes_by_id = {r.id: r for r in recipes}
+
+        result: list[SaleResolvedModel] = []
+        for sale in sales:
+            code, reason_if_missing = self._resolve_sale_product_code(
+                sale, matrices_by_id, recipes_by_id
+            )
+            if code is None and reason_if_missing is not None:
+                _logger.warning(
+                    "Не удалось определить код товара для продажи (%s): "
+                    "vending_machine_id=%s, line=%s, matrix_id=%s, product_name=%r",
+                    reason_if_missing,
+                    sale.vending_machine_id,
+                    sale.line,
+                    sale.matrix_id,
+                    sale.product_name,
+                )
+            result.append(
+                SaleResolvedModel(
+                    price=sale.price,
+                    timestamp=sale.timestamp,
+                    product_code=code,
+                )
+            )
+        return result
+
+    def _resolve_sale_product_code(
+            self,
+            sale: SaleModel,
+            matrices_by_id: dict[int, MatrixModel],
+            recipes_by_id: dict[int, RecipeModel],
+    ) -> tuple[str | None, str | None]:
+        """Возвращает (код, причина_для_лога) если код отсутствует; причина None если логировать не нужно."""
+        direct = sale.product_code
+        if direct is not None:
+            return direct, None
+
+        if sale.line == -1:
+            return None, "'переплата'."
+
+        if not is_product_name_placeholder(sale.product_name):
+            return None, "в названии нет кода (не плейсхолдер «Товар <номер>»)"
+
+        if sale.matrix_id is None:
+            return None, "плейсхолдер без MatrixId, восстановление по матрице невозможно"
+
+        matrix = matrices_by_id.get(sale.matrix_id)
+        if matrix is None:
+            return None, "матрица не найдена в ответе GetGoodsMatrices"
+
+        cell: GoodsCell | RecipeCell | None = None
+        for c in matrix.cells:
+            # ошибочная планограмма снеков TCN, двойная ячейка должна обозначаться нечётным числом, но она обозначена чётным.
+            if c.line_number == sale.line or sale.line % 2 == 0 and sale.line - 1 == c.line_number:
+                if isinstance(c, (GoodsCell, RecipeCell)):
+                    cell = c
+                break
+
+        if cell is None:
+            return None, "ячейка с указанным LineNumber не найдена или тип ячейки не поддерживается"
+
+        if isinstance(matrix, GoodsMatrixModel):
+            if isinstance(cell, GoodsCell):
+                resolved = cell.product_code
+                if resolved is None:
+                    return None, "в ячейке матрицы товаров нет кода в GoodsName"
+                return resolved, None
+            return None, "ожидалась ячейка товарной матрицы (GoodsCell)"
+
+        if isinstance(matrix, RecipeMatrixModel):
+            if not isinstance(cell, RecipeCell):
+                return None, "ожидалась ячейка рецептурной матрицы (RecipeCell)"
+            recipe = recipes_by_id.get(cell.recipe_id)
+            if recipe is None:
+                return None, f"рецепт FormulationId={cell.recipe_id} не найден в GetFormulations"
+            resolved = recipe.code
+            if resolved is None:
+                return None, "в названии рецепта нет кода (FormulationName)"
+            return resolved, None
+
+        if isinstance(matrix, ComboMatrixModel):
+            return None, "матрица типа Combo (MatrixType=3): восстановление кода не поддерживается"
+
+        return None, "неизвестный тип матрицы"
+
     async def get_products(self, account: KitAPIAccount | None = None) -> list[ProductModel]:
         url = f"{self._base_url}/GetGoods"
 
@@ -112,30 +282,58 @@ class KitVendingAPIClient:
         return [ProductModel.model_validate(item) for item in response["Goods"]]
 
     async def get_recipes(self, account: KitAPIAccount | None = None) -> list[RecipeModel]:
-        url = f"{self._base_url}/GetFormulations"
+        """Список рецептов (GetFormulations). Ответ кэшируется по аккаунту на время жизни клиента.
 
-        async def build_data() -> dict[str, Any]:
-            request_id = await self._timestamp_provider.async_get_now()
-            return {"Auth": self._build_auth(request_id, account)}
+        Возвращаемые модели не следует изменять на месте: это те же экземпляры, что в кэше.
+        """
+        key = self._account_cache_key(account)
+        hit = self._recipes_cache.get(key)
+        if hit is not None:
+            return hit
+        key_lock = await self._get_recipes_key_lock(key)
+        async with key_lock:
+            hit = self._recipes_cache.get(key)
+            if hit is not None:
+                return hit
+            url = f"{self._base_url}/GetFormulations"
 
-        response = await self._async_send_post_request(url, build_data)
+            async def build_data() -> dict[str, Any]:
+                request_id = await self._timestamp_provider.async_get_now()
+                return {"Auth": self._build_auth(request_id, account)}
 
-        return [RecipeModel.model_validate(item) for item in response["Formulations"]]
+            response = await self._async_send_post_request(url, build_data)
+
+            recipes = [RecipeModel.model_validate(item) for item in response["Formulations"]]
+            self._recipes_cache[key] = recipes
+            return recipes
 
     async def get_product_matrices(self, account: KitAPIAccount | None = None) -> MatricesKitCollection:
-        url = f"{self._base_url}/GetGoodsMatrices"
+        """Матрицы товаров (GetGoodsMatrices). Ответ кэшируется по аккаунту на время жизни клиента.
 
-        async def build_data() -> dict[str, Any]:
-            request_id = await self._timestamp_provider.async_get_now()
-            return {"Auth": self._build_auth(request_id, account)}
+        Возвращаемую коллекцию не следует изменять на месте: это тот же экземпляр, что в кэше.
+        """
+        key = self._account_cache_key(account)
+        hit = self._matrices_cache.get(key)
+        if hit is not None:
+            return hit
+        key_lock = await self._get_matrices_key_lock(key)
+        async with key_lock:
+            hit = self._matrices_cache.get(key)
+            if hit is not None:
+                return hit
+            url = f"{self._base_url}/GetGoodsMatrices"
 
-        response = await self._async_send_post_request(url, build_data)
-        matrix_collection = MatricesKitCollection.model_validate(response)
+            async def build_data() -> dict[str, Any]:
+                request_id = await self._timestamp_provider.async_get_now()
+                return {"Auth": self._build_auth(request_id, account)}
 
-        return matrix_collection
+            response = await self._async_send_post_request(url, build_data)
+            matrix_collection = MatricesKitCollection.model_validate(response)
+            self._matrices_cache[key] = matrix_collection
+            return matrix_collection
 
     async def get_recipe_matrices_with_codes(
-        self, account: KitAPIAccount | None = None
+            self, account: KitAPIAccount | None = None
     ) -> list[RecipeCodeMatrixModel]:
         recipes = await self.get_recipes(account)
         by_id = {r.id: r for r in recipes}
@@ -263,13 +461,27 @@ class KitVendingAPIClient:
 
         await self._async_send_post_request(url, build_data)
 
+    def clear_matrices_and_recipes_cache(self, account: KitAPIAccount | None = None) -> None:
+        """Сброс кэша GetGoodsMatrices / GetFormulations.
+
+        При ``account is None`` очищается кэш для всех аккаунтов; иначе — только для
+        пары ``(company_id, login)`` переданного аккаунта.
+        """
+        if account is None:
+            self._matrices_cache.clear()
+            self._recipes_cache.clear()
+            return
+        key: CacheKey = (account.company_id, account.login)
+        self._matrices_cache.pop(key, None)
+        self._recipes_cache.pop(key, None)
+
     def is_authenticated(self) -> bool:
         return self._login is not None and self._password is not None and self._company_id is not None
 
     def _build_auth(self, request_id: int, account: KitAPIAccount | None) -> dict[str, Any]:
         if not self.is_authenticated() and account is None:
             raise KitAPIAuthError(
-                "Учётные данные не установлены. Передайте данные в констуктор клиента "
+                "Учётные данные не установлены. Передайте данные в конструктор клиента "
                 "или в аргументах метода в виде аккаунта.")
 
         if account is not None:
