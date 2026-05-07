@@ -3,6 +3,7 @@ import re
 from kit_api.enums import VendingMachineStatus, VendingMachineKind
 
 _PRODUCT_NAME_PLACEHOLDER = re.compile(r"Товар\s+\d+")
+_PRODUCT_PLACEHOLDER_CAPTURE = re.compile(r"Товар\s+(\d+)")
 _PRODUCT_ZERO_PLACEHOLDER = re.compile(r"Товар\s+0")
 _VM_CODE_RE = re.compile(r"\[(\d{3})\]")
 
@@ -15,6 +16,21 @@ def is_product_name_placeholder(name: str) -> bool:
 def is_product_zero_placeholder(name: str) -> bool:
     """Плейсхолдер «Товар 0» — недопустимая позиция, отдельно от остальных «Товар N»."""
     return bool(_PRODUCT_ZERO_PLACEHOLDER.fullmatch(name.strip()))
+
+
+def try_product_code_from_placeholder_name(name: str) -> str | None:
+    """Если имя — плейсхолдер «Товар N», а N — ровно 4 цифры и начинается с «2», вернуть N как код товара.
+
+    Используется, когда MatrixId отсутствует или матрица не пришла в GetGoodsMatrices, но номер
+    на самом деле совпадает с кодом товара в учётной системе (например 2311, 2101).
+    """
+    m = _PRODUCT_PLACEHOLDER_CAPTURE.fullmatch(name.strip())
+    if not m:
+        return None
+    digits = m.group(1)
+    if len(digits) == 4 and digits.startswith("2"):
+        return digits
+    return None
 
 
 def extract_statuses(statuses_str: str) -> list[VendingMachineStatus]:

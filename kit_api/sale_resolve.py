@@ -28,6 +28,7 @@ from kit_api.utils import (
     extract_vending_machine_code,
     is_product_name_placeholder,
     is_product_zero_placeholder,
+    try_product_code_from_placeholder_name,
 )
 
 _LOGGER: Final = logging.getLogger(__name__)
@@ -68,12 +69,18 @@ def resolve_sale_product_code(
         )
 
     if sale.matrix_id is None:
+        fallback = try_product_code_from_placeholder_name(sale.product_name)
+        if fallback is not None:
+            return fallback
         raise SaleProductCodeResolveCriticalError(
             "плейсхолдер без MatrixId, восстановление по матрице невозможно"
         )
 
     matrix = matrices_by_id.get(sale.matrix_id)
     if matrix is None:
+        fallback = try_product_code_from_placeholder_name(sale.product_name)
+        if fallback is not None:
+            return fallback
         raise SaleProductCodeResolveCriticalError(
             "матрица не найдена в ответе GetGoodsMatrices"
         )
