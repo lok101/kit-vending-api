@@ -1,4 +1,4 @@
-from typing import Literal, Union, Annotated
+from typing import Literal, Union, Annotated, cast
 from pydantic import BaseModel, Field, Tag
 
 from kit_api.models.matrix_cell import GoodsCell, BaseMatrixCell, RecipeCell, RecipeCodeCell
@@ -12,12 +12,12 @@ class MatrixModel(BaseModel):
 
 class GoodsMatrixModel(MatrixModel):
     type: Literal[1] = Field(validation_alias="MatrixType")
-    cells: Annotated[list[GoodsCell], Field(validation_alias="Details")]
+    cells: Annotated[list[GoodsCell], Field(validation_alias="Details")]  # type: ignore[assignment]
 
 
 class RecipeMatrixModel(MatrixModel):
     type: Literal[2] = Field(validation_alias="MatrixType")
-    cells: Annotated[list[RecipeCell], Field(validation_alias="Details")]
+    cells: Annotated[list[RecipeCell], Field(validation_alias="Details")]  # type: ignore[assignment]
 
 
 class RecipeCodeMatrixModel(BaseModel):
@@ -33,9 +33,9 @@ class ComboMatrixModel(MatrixModel):
 
 MatrixType = Annotated[
     Union[
-        Annotated[GoodsMatrixModel, Tag(1)],
-        Annotated[RecipeMatrixModel, Tag(2)],
-        Annotated[ComboMatrixModel, Tag(3)],
+        Annotated[GoodsMatrixModel, Tag(1)],  # pyright: ignore[reportArgumentType]
+        Annotated[RecipeMatrixModel, Tag(2)],  # pyright: ignore[reportArgumentType]
+        Annotated[ComboMatrixModel, Tag(3)],  # pyright: ignore[reportArgumentType]
     ],
     Field(discriminator="type")
 ]
@@ -51,4 +51,18 @@ class MatricesKitCollection(BaseModel):
         return [item for item in self.items if isinstance(item, RecipeMatrixModel)]
 
     def get_all_matrices(self) -> list[MatrixModel]:
-        return self.items.copy()
+        return cast(list[MatrixModel], self.items.copy())
+
+
+__all__ = [
+    "ComboMatrixModel",
+    "GoodsMatrixModel",
+    "MatricesKitCollection",
+    "MatrixModel",
+    "MatrixType",
+    "RecipeCodeMatrixModel",
+    "RecipeMatrixModel",
+    "GoodsCell",
+    "RecipeCell",
+    "RecipeCodeCell",
+]

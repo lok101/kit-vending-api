@@ -615,7 +615,7 @@ class TestGetSalesResolved:
 
         assert len(result) == 0
         assert mock_session.post.call_count == 1
-        assert "Пропуск продажи без кода товара" in caplog.text
+        assert "Не удалось определить код товара для продажи" in caplog.text
         await client.close()
 
     @pytest.mark.asyncio

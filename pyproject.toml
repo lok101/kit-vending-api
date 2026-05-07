@@ -18,6 +18,8 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "black>=23.0.0",
     "ruff>=0.13.3",
+    "mypy>=1.13.0",
+    "pyright>=1.1.390",
 ]
 test = [
     "pytest>=9.0.2",
@@ -58,3 +60,20 @@ python_functions = ["test_*"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "-v"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+packages = ["kit_api"]
+plugins = ["pydantic.mypy"]
+disable_error_code = ["prop-decorator"]
+
+[[tool.mypy.overrides]]
+module = "dotenv.*"
+ignore_missing_imports = true
+
+[tool.pyright]
+include = ["kit_api"]
+exclude = ["**/tests", "**/__pycache__"]
+pythonVersion = "3.10"
+typeCheckingMode = "strict"

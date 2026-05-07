@@ -36,7 +36,7 @@ def extract_statuses(statuses_str: str) -> list[VendingMachineStatus]:
     return res
 
 
-def extract_product_code(product_name: str):
+def extract_product_code(product_name: str) -> str | None:
     if "|" not in product_name:
         return None
 
@@ -49,6 +49,6 @@ def extract_product_code(product_name: str):
     return None
 
 
-def extract_vending_machine_code(vending_machine_name: str):
+def extract_vending_machine_code(vending_machine_name: str) -> str | None:
     m = _VM_CODE_RE.search(vending_machine_name)
     return m.group(1) if m else None

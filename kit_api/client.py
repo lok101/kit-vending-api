@@ -5,7 +5,8 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Mapping, Any, Callable, Awaitable, TypeAlias
+from types import TracebackType
+from typing import Any, Callable, Awaitable, TypeAlias, cast
 
 import aiohttp
 from aiohttp import ClientError as AioHTTPClientError, ContentTypeError
@@ -90,9 +91,9 @@ class KitVendingAPIClient:
         self._company_id: int | None = None
 
         if account:
-            self._login: str | None = account.login
-            self._password: str | None = account.password
-            self._company_id: int | None = account.company_id
+            self._login = account.login
+            self._password = account.password
+            self._company_id = account.company_id
 
         self._matrices_cache: dict[CacheKey, MatricesKitCollection] = {}
         self._recipes_cache: dict[CacheKey, list[RecipeModel]] = {}
@@ -132,7 +133,7 @@ class KitVendingAPIClient:
             self,
             from_date: datetime,
             to_date: datetime,
-            vending_machine_id: int = None,
+            vending_machine_id: int | None = None,
             account: KitAPIAccount | None = None,
     ) -> list[SaleModel]:
         url = f"{self._base_url}/GetSales"
@@ -498,7 +499,7 @@ class KitVendingAPIClient:
             matrix_id: int,
             machine_id: int,
             account: KitAPIAccount | None = None
-    ) -> None | KitAPIError:
+    ) -> None:
         url = f"{self._base_url}/ApplyMatrix"
 
         async def build_data() -> dict[str, Any]:
@@ -517,7 +518,7 @@ class KitVendingAPIClient:
             machine_id: int,
             command: VendingMachineCommand,
             account: KitAPIAccount | None = None
-    ) -> None | KitAPIError:
+    ) -> None:
         url = f"{self._base_url}/SendCommand"
 
         async def build_data() -> dict[str, Any]:
@@ -562,6 +563,9 @@ class KitVendingAPIClient:
             company_id = account.company_id
 
         else:
+            assert self._login is not None
+            assert self._password is not None
+            assert self._company_id is not None
             login = self._login
             password = self._password
             company_id = self._company_id
@@ -585,8 +589,8 @@ class KitVendingAPIClient:
     async def _async_send_post_request(
             self,
             url: str,
-            build_data: Callable[[], Awaitable[Mapping]]
-    ) -> Mapping:
+            build_data: Callable[[], Awaitable[dict[str, Any]]],
+    ) -> dict[str, Any]:
 
         max_retries = 2
 
@@ -601,7 +605,7 @@ class KitVendingAPIClient:
                     response.raise_for_status()
 
                     try:
-                        response_data = await response.json()
+                        response_data = cast(dict[str, Any], await response.json())
 
                     except (ContentTypeError, json.JSONDecodeError) as attempt_ex:
                         raise KitAPIResponseError(
@@ -649,13 +653,18 @@ class KitVendingAPIClient:
 
         raise KitAPIError("Неожиданное завершение цикла retry")
 
-    async def close(self):
+    async def close(self) -> None:
         if self._session and not self._session.closed and self._own_session:
             await self._session.close()
             self._session = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "KitVendingAPIClient":
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         await self.close()

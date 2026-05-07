@@ -13,6 +13,7 @@ from kit_api.models.product import ProductModel
 from kit_api.models.recipe import RecipeModel
 from kit_api.models.sale import SaleModel, SaleResolvedModel
 from kit_api.models.vending_machine import VendingMachineModel
+from kit_api.models.vending_machine_state import VendingMachineStateModel
 
 __all__ = [
     # Matrices
@@ -34,4 +35,5 @@ __all__ = [
     "SaleResolvedModel",
     # Vending Machines
     "VendingMachineModel",
+    "VendingMachineStateModel",
 ]

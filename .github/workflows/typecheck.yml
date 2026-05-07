@@ -1,0 +1,27 @@
+name: Typecheck
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync and typecheck
+        run: |
+          uv sync --extra dev --extra test
+          uv run mypy kit_api
+          uv run pyright kit_api
+
+      - name: Tests
+        run: uv run pytest
