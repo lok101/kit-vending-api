@@ -4,8 +4,8 @@ from typing import Annotated
 from pydantic import BaseModel, Field, computed_field
 
 from kit_api.enums import VendingMachineActivityStatus, VendingMachineKind
+from kit_api.utils import extract_vending_machine_code
 
-_VM_CODE_RE = re.compile(r"\[(\d{3})\]")
 _VM_INACTIVE_NAME_RE = re.compile(r"\[\s*[ХхXx]\s*\]")
 
 
@@ -18,8 +18,7 @@ class VendingMachineModel(BaseModel):
     @computed_field
     @property
     def code(self) -> str | None:
-        m = _VM_CODE_RE.search(self.name)
-        return m.group(1) if m else None
+        return extract_vending_machine_code(self.name)
 
     @computed_field
     @property

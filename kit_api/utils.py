@@ -3,6 +3,7 @@ import re
 from kit_api.enums import VendingMachineStatus
 
 _PRODUCT_NAME_PLACEHOLDER = re.compile(r"Товар\s+\d+")
+_VM_CODE_RE = re.compile(r"\[(\d{3})\]")
 
 
 def is_product_name_placeholder(name: str) -> bool:
@@ -40,3 +41,8 @@ def extract_product_code(product_name: str):
         return left_stripped
 
     return None
+
+
+def extract_vending_machine_code(vending_machine_name: str):
+    m = _VM_CODE_RE.search(vending_machine_name)
+    return m.group(1) if m else None

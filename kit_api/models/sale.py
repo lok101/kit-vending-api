@@ -38,4 +38,5 @@ class SaleResolvedModel(BaseModel):
 
     price: float
     timestamp: datetime
-    product_code: str | None
+    product_code: str
+    vending_machine_code: str

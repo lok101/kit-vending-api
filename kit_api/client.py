@@ -37,7 +37,7 @@ from kit_api.models.vending_machine_state import VendingMachineStateModel
 from kit_api.timestamp_api import TimestampAPI
 from kit_api.project_time import LibDateTime
 from kit_api.rate_limiter import rate_limit, GlobalBackoff
-from kit_api.utils import is_product_name_placeholder
+from kit_api.utils import is_product_name_placeholder, extract_vending_machine_code
 
 load_dotenv()
 
@@ -166,7 +166,7 @@ class KitVendingAPIClient:
             sale.product_code is None
             and is_product_name_placeholder(sale.product_name)
             and sale.matrix_id is not None
-            and sale.line != -1 # Так маркируется "переплата", всегда пропускаем
+            and sale.line != -1  # Так маркируется "переплата", всегда пропускаем
             for sale in sales
         )
 
@@ -192,27 +192,52 @@ class KitVendingAPIClient:
             code, reason_if_missing = self._resolve_sale_product_code(
                 sale, matrices_by_id, recipes_by_id
             )
+
             if code is None and reason_if_missing is not None:
                 _logger.warning(
                     "Не удалось определить код товара для продажи (%s): "
-                    "vending_machine_id=%s, line=%s, matrix_id=%s, product_name=%r",
+                    "vending_machine_name=%s, line=%s, matrix_id=%s, product_name=%r",
                     reason_if_missing,
-                    sale.vending_machine_id,
+                    sale.vending_machine_name,
                     sale.line,
                     sale.matrix_id,
                     sale.product_name,
                 )
+                continue
+
+            vending_machine_code: str | None = self._resolve_sale_vending_machine_code(sale)
+            if vending_machine_code is None:
+                _logger.warning(
+                    "Не удалось определить код аппарата для продажи."
+                    "vending_machine_name=%s, line=%s, matrix_id=%s, product_name=%r",
+                    sale.vending_machine_name,
+                    sale.line,
+                    sale.matrix_id,
+                    sale.product_name,
+                )
+                continue
+
             result.append(
                 SaleResolvedModel(
                     price=sale.price,
                     timestamp=sale.timestamp,
                     product_code=code,
+                    vending_machine_code=vending_machine_code
                 )
             )
         return result
 
+    @staticmethod
+    def _resolve_sale_vending_machine_code(sale: SaleModel) -> str | None:
+        vending_machine_code: str | None = extract_vending_machine_code(sale.vending_machine_name)
+
+        if vending_machine_code is None:
+            return None
+
+        return vending_machine_code
+
+    @staticmethod
     def _resolve_sale_product_code(
-            self,
             sale: SaleModel,
             matrices_by_id: dict[int, MatrixModel],
             recipes_by_id: dict[int, RecipeModel],
@@ -223,7 +248,7 @@ class KitVendingAPIClient:
             return direct, None
 
         if sale.line == -1:
-            return None, "'переплата'."
+            return None, "'переплата'"
 
         if not is_product_name_placeholder(sale.product_name):
             return None, "в названии нет кода (не плейсхолдер «Товар <номер>»)"
