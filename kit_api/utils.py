@@ -54,9 +54,9 @@ def extract_vending_machine_code(vending_machine_name: str) -> str | None:
     return m.group(1) if m else None
 
 
-def compute_vending_machine_type(vending_machine_code: str):
+def compute_vending_machine_type(vending_machine_code: str | None) -> VendingMachineKind:
     if vending_machine_code is None:
         return VendingMachineKind.NOT_DEFINED
-    if f"{vending_machine_code:03d}".startswith("5"):
+    if vending_machine_code.startswith("5"):
         return VendingMachineKind.SNACK
     return VendingMachineKind.COFFEE

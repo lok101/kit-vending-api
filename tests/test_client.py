@@ -4,7 +4,6 @@
 
 import pytest
 import json
-import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -454,268 +453,6 @@ class TestAPIMethods:
         await client.close()
 
 
-class TestGetSalesResolved:
-    """Тесты get_sales_resolved."""
-
-    @pytest.mark.asyncio
-    async def test_resolves_code_from_goods_matrix(self, mock_timestamp_provider):
-        """Плейсхолдер «Товар N» + товарная матрица — код из GoodsName ячейки."""
-        account = KitAPIAccount(login="u", password="p", company_id=1)
-        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
-
-        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-
-        sales_json = {
-            "ResultCode": 0,
-            "Sales": [
-                {
-                    "LineNumber": 3,
-                    "Sum": 55.5,
-                    "DateTime": "01.01.2024 12:00:00",
-                    "GoodsName": "Товар 3",
-                    "VendingMachine": 1,
-                    "VendingMachineName": "VM [001]",
-                    "MatrixId": 100,
-                }
-            ],
-        }
-        matrices_json = {
-            "ResultCode": 0,
-            "GoodsMatrices": [
-                {
-                    "MatrixId": 100,
-                    "MatrixName": "Snack",
-                    "MatrixType": 1,
-                    "Details": [
-                        {
-                            "LineNumber": 3,
-                            "Price2": 55.5,
-                            "GoodsName": "77|Snack bar",
-                            "MaxCount": 10,
-                        }
-                    ],
-                }
-            ],
-        }
-
-        mock_session = create_mock_session_with_post(
-            None,
-            post_side_effect=[
-                make_post_async_cm(mock_json_response(sales_json)),
-                make_post_async_cm(mock_json_response(matrices_json)),
-            ],
-        )
-        client._session = mock_session
-
-        result = await client.get_sales_resolved(from_date, to_date)
-
-        assert len(result) == 1
-        assert result[0].price == 55.5
-        assert result[0].product_code == "77"
-        assert mock_session.post.call_count == 2
-        await client.close()
-
-    @pytest.mark.asyncio
-    async def test_resolves_code_from_recipe_matrix(self, mock_timestamp_provider):
-        """Плейсхолдер + рецептурная матрица — код из формуляции."""
-        account = KitAPIAccount(login="u", password="p", company_id=1)
-        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
-
-        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-
-        sales_json = {
-            "ResultCode": 0,
-            "Sales": [
-                {
-                    "LineNumber": 3,
-                    "Sum": 99.0,
-                    "DateTime": "01.01.2024 12:00:00",
-                    "GoodsName": "Товар 3",
-                    "VendingMachine": 2,
-                    "VendingMachineName": "VM [001]",
-                    "MatrixId": 7,
-                }
-            ],
-        }
-        matrices_json = {
-            "ResultCode": 0,
-            "GoodsMatrices": [
-                {
-                    "MatrixId": 7,
-                    "MatrixName": "Matrix R",
-                    "MatrixType": 2,
-                    "Details": [
-                        {"LineNumber": 3, "Price2": 99.0, "FormulationId": 100},
-                    ],
-                }
-            ],
-        }
-        formulations_json = {
-            "ResultCode": 0,
-            "Formulations": [
-                {"FormulationId": 100, "FormulationName": "42|Recipe Title"},
-            ],
-        }
-
-        mock_session = create_mock_session_with_post(
-            None,
-            post_side_effect=[
-                make_post_async_cm(mock_json_response(sales_json)),
-                make_post_async_cm(mock_json_response(matrices_json)),
-                make_post_async_cm(mock_json_response(formulations_json)),
-            ],
-        )
-        client._session = mock_session
-
-        result = await client.get_sales_resolved(from_date, to_date)
-
-        assert len(result) == 1
-        assert result[0].product_code == "42"
-        assert mock_session.post.call_count == 3
-        await client.close()
-
-    @pytest.mark.asyncio
-    async def test_non_placeholder_does_not_fetch_matrices(
-        self, mock_timestamp_provider, caplog
-    ):
-        """Без плейсхолдера и без кода в названии — только GetSales, без GetGoodsMatrices."""
-        account = KitAPIAccount(login="u", password="p", company_id=1)
-        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
-
-        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-
-        sales_json = {
-            "ResultCode": 0,
-            "Sales": [
-                {
-                    "LineNumber": 1,
-                    "Sum": 10.0,
-                    "DateTime": "01.01.2024 12:00:00",
-                    "GoodsName": "Без кода в названии",
-                    "VendingMachine": 1,
-                    "VendingMachineName": "VM [001]",
-                    "MatrixId": 50,
-                }
-            ],
-        }
-
-        mock_session = create_mock_session_with_post(
-            None,
-            post_side_effect=[
-                make_post_async_cm(mock_json_response(sales_json)),
-            ],
-        )
-        client._session = mock_session
-
-        with caplog.at_level(logging.DEBUG, logger="kit_api.client"):
-            result = await client.get_sales_resolved(from_date, to_date)
-
-        assert len(result) == 0
-        assert mock_session.post.call_count == 1
-        assert "Не удалось определить код товара для продажи" in caplog.text
-        await client.close()
-
-    @pytest.mark.asyncio
-    async def test_product_zero_skips_debug_no_matrices(
-        self, mock_timestamp_provider, caplog
-    ):
-        """Плейсхолдер «Товар 0» — некритично, матрицы не запрашиваются."""
-        account = KitAPIAccount(login="u", password="p", company_id=1)
-        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
-
-        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-
-        sales_json = {
-            "ResultCode": 0,
-            "Sales": [
-                {
-                    "LineNumber": 1,
-                    "Sum": 10.0,
-                    "DateTime": "01.01.2024 12:00:00",
-                    "GoodsName": "Товар 0",
-                    "VendingMachine": 1,
-                    "VendingMachineName": "VM [100]",
-                    "MatrixId": 50,
-                }
-            ],
-        }
-
-        mock_session = create_mock_session_with_post(
-            None,
-            post_side_effect=[
-                make_post_async_cm(mock_json_response(sales_json)),
-            ],
-        )
-        client._session = mock_session
-
-        with caplog.at_level(logging.DEBUG, logger="kit_api.client"):
-            result = await client.get_sales_resolved(from_date, to_date)
-
-        assert result == []
-        assert mock_session.post.call_count == 1
-        assert "Товар 0" in caplog.text
-        assert "Пропуск продажи без кода товара" in caplog.text
-        await client.close()
-
-    @pytest.mark.asyncio
-    async def test_missing_cell_logs_warning(self, mock_timestamp_provider, caplog):
-        """Нет строки в матрице — предупреждение в логе."""
-        account = KitAPIAccount(login="u", password="p", company_id=1)
-        client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
-
-        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-
-        sales_json = {
-            "ResultCode": 0,
-            "Sales": [
-                {
-                    "LineNumber": 9,
-                    "Sum": 1.0,
-                    "DateTime": "01.01.2024 12:00:00",
-                    "GoodsName": "Товар 9",
-                    "VendingMachine": 1,
-                    "VendingMachineName": "VM [001]",
-                    "MatrixId": 1,
-                }
-            ],
-        }
-        matrices_json = {
-            "ResultCode": 0,
-            "GoodsMatrices": [
-                {
-                    "MatrixId": 1,
-                    "MatrixName": "M",
-                    "MatrixType": 1,
-                    "Details": [
-                        {"LineNumber": 1, "Price2": 1.0, "GoodsName": "1|A", "MaxCount": 1},
-                    ],
-                }
-            ],
-        }
-
-        mock_session = create_mock_session_with_post(
-            None,
-            post_side_effect=[
-                make_post_async_cm(mock_json_response(sales_json)),
-                make_post_async_cm(mock_json_response(matrices_json)),
-            ],
-        )
-        client._session = mock_session
-
-        with caplog.at_level(logging.WARNING, logger="kit_api.client"):
-            result = await client.get_sales_resolved(from_date, to_date)
-
-        assert result == []
-        assert "Не удалось определить код товара" in caplog.text
-        assert "ячейка" in caplog.text
-        await client.close()
-
-
 class TestRecipeMatricesWithCodes:
     """Тесты get_recipe_matrices_with_codes"""
 
@@ -836,28 +573,11 @@ class TestMatricesRecipesCache:
     """Кэш GetGoodsMatrices / GetFormulations по (company_id, login)."""
 
     @pytest.mark.asyncio
-    async def test_second_get_sales_resolved_reuses_cached_matrices(self, mock_timestamp_provider):
-        """Два вызова get_sales_resolved с одним аккаунтом — GetGoodsMatrices один раз."""
+    async def test_second_get_product_matrices_reuses_cache(self, mock_timestamp_provider):
+        """Два вызова get_product_matrices с одним аккаунтом — GetGoodsMatrices один раз."""
         account = KitAPIAccount(login="u", password="p", company_id=1)
         client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
 
-        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-
-        sales_json = {
-            "ResultCode": 0,
-            "Sales": [
-                {
-                    "LineNumber": 3,
-                    "Sum": 55.5,
-                    "DateTime": "01.01.2024 12:00:00",
-                    "GoodsName": "Товар 3",
-                    "VendingMachine": 1,
-                    "VendingMachineName": "VM [001]",
-                    "MatrixId": 100,
-                }
-            ],
-        }
         matrices_json = {
             "ResultCode": 0,
             "GoodsMatrices": [
@@ -880,58 +600,25 @@ class TestMatricesRecipesCache:
         mock_session = create_mock_session_with_post(
             None,
             post_side_effect=[
-                make_post_async_cm(mock_json_response(sales_json)),
                 make_post_async_cm(mock_json_response(matrices_json)),
-                make_post_async_cm(mock_json_response(sales_json)),
             ],
         )
         client._session = mock_session
 
-        r1 = await client.get_sales_resolved(from_date, to_date)
-        r2 = await client.get_sales_resolved(from_date, to_date)
+        c1 = await client.get_product_matrices()
+        c2 = await client.get_product_matrices()
 
-        assert len(r1) == 1 and r1[0].product_code == "77"
-        assert len(r2) == 1 and r2[0].product_code == "77"
-        assert mock_session.post.call_count == 3
+        assert c1 is c2
+        assert mock_session.post.call_count == 1
         assert _count_posts_containing(mock_session, "GetGoodsMatrices") == 1
         await client.close()
 
     @pytest.mark.asyncio
-    async def test_second_get_sales_resolved_reuses_cached_formulations(self, mock_timestamp_provider):
-        """Два вызова с рецептурной матрицей — по одному запросу к GetGoodsMatrices и GetFormulations."""
+    async def test_second_get_recipes_reuses_cache(self, mock_timestamp_provider):
+        """Два вызова get_recipes с одним аккаунтом — GetFormulations один раз."""
         account = KitAPIAccount(login="u", password="p", company_id=1)
         client = KitVendingAPIClient(account=account, timestamp_provider=mock_timestamp_provider)
 
-        from_date = datetime(2024, 1, 1, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-        to_date = datetime(2024, 1, 31, tzinfo=ZoneInfo("Asia/Yekaterinburg"))
-
-        sales_json = {
-            "ResultCode": 0,
-            "Sales": [
-                {
-                    "LineNumber": 3,
-                    "Sum": 99.0,
-                    "DateTime": "01.01.2024 12:00:00",
-                    "GoodsName": "Товар 3",
-                    "VendingMachine": 2,
-                    "VendingMachineName": "VM [001]",
-                    "MatrixId": 7,
-                }
-            ],
-        }
-        matrices_json = {
-            "ResultCode": 0,
-            "GoodsMatrices": [
-                {
-                    "MatrixId": 7,
-                    "MatrixName": "Matrix R",
-                    "MatrixType": 2,
-                    "Details": [
-                        {"LineNumber": 3, "Price2": 99.0, "FormulationId": 100},
-                    ],
-                }
-            ],
-        }
         formulations_json = {
             "ResultCode": 0,
             "Formulations": [
@@ -942,20 +629,16 @@ class TestMatricesRecipesCache:
         mock_session = create_mock_session_with_post(
             None,
             post_side_effect=[
-                make_post_async_cm(mock_json_response(sales_json)),
-                make_post_async_cm(mock_json_response(matrices_json)),
                 make_post_async_cm(mock_json_response(formulations_json)),
-                make_post_async_cm(mock_json_response(sales_json)),
             ],
         )
         client._session = mock_session
 
-        r1 = await client.get_sales_resolved(from_date, to_date)
-        r2 = await client.get_sales_resolved(from_date, to_date)
+        r1 = await client.get_recipes()
+        r2 = await client.get_recipes()
 
-        assert r1[0].product_code == "42" and r2[0].product_code == "42"
-        assert mock_session.post.call_count == 4
-        assert _count_posts_containing(mock_session, "GetGoodsMatrices") == 1
+        assert r1 is r2
+        assert mock_session.post.call_count == 1
         assert _count_posts_containing(mock_session, "GetFormulations") == 1
         await client.close()
 
