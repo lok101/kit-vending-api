@@ -4,7 +4,7 @@ from typing import Annotated
 from pydantic import BaseModel, Field, computed_field
 
 from kit_api.enums import VendingMachineActivityStatus, VendingMachineKind
-from kit_api.utils import extract_vending_machine_code
+from kit_api.utils import extract_vending_machine_code, compute_vending_machine_type
 
 _VM_INACTIVE_NAME_RE = re.compile(r"\[\s*[ХхXx]\s*\]")
 
@@ -30,9 +30,4 @@ class VendingMachineModel(BaseModel):
     @computed_field
     @property
     def type(self) -> VendingMachineKind:
-        c = self.code
-        if c is None:
-            return VendingMachineKind.NOT_DEFINED
-        if f"{c:03d}".startswith("5"):
-            return VendingMachineKind.SNACK
-        return VendingMachineKind.COFFEE
+        return compute_vending_machine_type(self.code)

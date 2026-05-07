@@ -1,6 +1,6 @@
 import re
 
-from kit_api.enums import VendingMachineStatus
+from kit_api.enums import VendingMachineStatus, VendingMachineKind
 
 _PRODUCT_NAME_PLACEHOLDER = re.compile(r"Товар\s+\d+")
 _PRODUCT_ZERO_PLACEHOLDER = re.compile(r"Товар\s+0")
@@ -52,3 +52,11 @@ def extract_product_code(product_name: str) -> str | None:
 def extract_vending_machine_code(vending_machine_name: str) -> str | None:
     m = _VM_CODE_RE.search(vending_machine_name)
     return m.group(1) if m else None
+
+
+def compute_vending_machine_type(vending_machine_code: str):
+    if vending_machine_code is None:
+        return VendingMachineKind.NOT_DEFINED
+    if f"{vending_machine_code:03d}".startswith("5"):
+        return VendingMachineKind.SNACK
+    return VendingMachineKind.COFFEE

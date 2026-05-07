@@ -24,7 +24,7 @@ from kit_api.models import (
     SaleModel,
     SaleResolvedModel,
 )
-from kit_api.enums import VendingMachineCommand, ResultCode
+from kit_api.enums import VendingMachineCommand, ResultCode, VendingMachineKind
 from kit_api.models import VendingMachineModel
 from kit_api.exceptions import (
     KitAPIError,
@@ -43,7 +43,7 @@ from kit_api.rate_limiter import rate_limit, GlobalBackoff
 from kit_api.utils import (
     extract_vending_machine_code,
     is_product_name_placeholder,
-    is_product_zero_placeholder,
+    is_product_zero_placeholder, compute_vending_machine_type,
 )
 
 load_dotenv()
@@ -238,12 +238,15 @@ class KitVendingAPIClient:
                 )
                 continue
 
+            vending_machine_type: VendingMachineKind = compute_vending_machine_type(vending_machine_code)
+
             result.append(
                 SaleResolvedModel(
                     price=sale.price,
                     timestamp=sale.timestamp,
                     product_code=code,
-                    vending_machine_code=vending_machine_code
+                    vending_machine_code=vending_machine_code,
+                    vending_machine_type=vending_machine_type
                 )
             )
         return result

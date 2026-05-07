@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
+from kit_api.enums import VendingMachineKind
 from pydantic import BaseModel, Field, BeforeValidator, computed_field
 
 from kit_api.project_time import LibDateTime
@@ -40,3 +41,4 @@ class SaleResolvedModel(BaseModel):
     timestamp: datetime
     product_code: str
     vending_machine_code: str
+    vending_machine_type: VendingMachineKind
