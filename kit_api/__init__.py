@@ -24,6 +24,11 @@ from kit_api.models import (
     SaleResolvedModel,
     VendingMachineStateModel,
 )
+from kit_api.sale_resolve import (
+    resolve_sale_product_code,
+    resolve_sale_vending_machine_code,
+    resolve_sales_with_catalog,
+)
 
 __version__ = "0.1.0"
 
@@ -44,6 +49,10 @@ __all__ = [
     "SaleProductCodeResolveCriticalError",
     "SaleProductCodeResolveError",
     "SaleProductCodeResolveNonCriticalError",
+    # Sale resolution
+    "resolve_sale_product_code",
+    "resolve_sale_vending_machine_code",
+    "resolve_sales_with_catalog",
     # Models
     "MatricesKitCollection",
     "ProductModel",
