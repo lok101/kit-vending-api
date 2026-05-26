@@ -5,7 +5,7 @@ from kit_api.enums import VendingMachineKind
 from pydantic import BaseModel, Field, BeforeValidator, computed_field
 
 from kit_api.project_time import LibDateTime
-from kit_api.utils import extract_product_code
+from kit_api.utils import extract_product_code, extract_vending_machine_code
 
 
 class SaleModel(BaseModel):
@@ -27,6 +27,11 @@ class SaleModel(BaseModel):
         Field(validation_alias="MatrixId"),
         BeforeValidator(lambda val: int(val) if val else None)
     ]
+
+    @computed_field
+    @property
+    def vending_machine_code(self) -> str | None:
+        return extract_vending_machine_code(self.vending_machine_name)
 
     @computed_field
     @property
